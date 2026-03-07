@@ -1,0 +1,71 @@
+appId: com.clawdesk.app
+productName: ClawDesk
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{*.bat,debug_electron.js}'
+  - '!.agents/**'
+  - '!.github/**'
+  - '!docs/**'
+extraResources:
+  - from: LICENSE-OPENCLAW.txt
+    to: LICENSE-OPENCLAW.txt
+  - from: LICENSE
+    to: LICENSE
+asarUnpack:
+  - resources/**
+  - node_modules/openclaw
+  - node_modules/koffi
+  - node_modules/sqlite-vec-windows-x64
+  - node_modules/@mariozechner/pi-agent-core
+  - node_modules/@img/sharp-libvips-win32-x64
+win:
+  executableName: ClawDesk
+  icon: build/icon.ico
+  target:
+    - nsis
+    - appx
+  forceCodeSigning: false
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "ClawDesk"
+  runAfterFinish: true
+appx:
+  identityName: ClawDesk
+  publisherDisplayName: ClawDesk
+  publisher: "CN=REPLACE_ME_FROM_PARTNER_CENTER"
+  setBuildNumber: false
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - deb
+  maintainer: clawdesk
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+publish:
+  provider: github
+  owner: clawdesk
+  repo: clawdesk

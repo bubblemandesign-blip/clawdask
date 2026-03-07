@@ -1,0 +1,15 @@
+node_modules
+dist
+out
+.DS_Store
+.eslintcache
+*.log*
+*.exe
+docs/downloads/
+build_output.log
+gofile_result.json
+pixeldrain_result.json
+bashupload_url.txt
+tunnel_url.txt
+tunnel_cf.log
+cloudflared.exe

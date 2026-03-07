@@ -1,0 +1,8 @@
+version: 1.0.0
+files:
+  - url: downloads/ClawDesk-Setup-Win.exe
+    sha512: DU0s/CLP1ZJGpR1UymsvC14re0ce0c8DYO6/jJ9XwbFkR+NILh0wsu/uWzJEBGxIjmIZmhg1180eWVfAeGJUMw==
+    size: 176847942
+path: downloads/ClawDesk-Setup-Win.exe
+sha512: DU0s/CLP1ZJGpR1UymsvC14re0ce0c8DYO6/jJ9XwbFkR+NILh0wsu/uWzJEBGxIjmIZmhg1180eWVfAeGJUMw==
+releaseDate: '2026-03-07T18:29:10.197Z'

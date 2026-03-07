@@ -1,0 +1,21 @@
+/* ClawDesk — Deep Black Base */
+:root {
+  --bg: #0a0a0a;
+  --text: #f0f0f0;
+  --text-dim: #888;
+  --border: rgba(255, 255, 255, 0.06);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
