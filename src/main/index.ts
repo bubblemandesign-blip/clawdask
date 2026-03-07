@@ -68,10 +68,6 @@ class GatewayManager {
       return false
     }
 
-    // Force stop any zombie processes on our core port
-    this.stop()
-    await ensurePortFree(GATEWAY_PORT)
-
     if (await this.verifyGateway()) {
       console.log('[gateway] Existing gateway detected — reusing')
       this.state = 'running'
@@ -206,24 +202,6 @@ function checkPort(port: number): Promise<boolean> {
     req.on('error', () => resolve(false))
     req.setTimeout(2000, () => { req.destroy(); resolve(false) })
   })
-}
-
-async function ensurePortFree(port: number): Promise<void> {
-  if (process.platform !== 'win32') return
-  try {
-    const output = execSync(`netstat -ano | findstr :${port}`).toString()
-    const lines = output.split('\n')
-    for (const line of lines) {
-      const parts = line.trim().split(/\s+/)
-      if (parts.length > 4 && parts[1].endsWith(`:${port}`)) {
-        const pid = parts[parts.length - 1]
-        if (pid && pid !== '0' && pid !== String(process.pid)) {
-          console.log(`[system] Killing process ${pid} using port ${port}`)
-          execSync(`taskkill /f /pid ${pid} /t`)
-        }
-      }
-    }
-  } catch (e) { /* ignore if port is already free */ }
 }
 
 async function waitForPortRange(startPort: number, endPort: number, timeoutMs = 30000): Promise<number | null> {
@@ -487,13 +465,7 @@ function createTrayMenu(): void {
   if (!tray) return
   const labels: any = { stopped: '⚫ Stopped', starting: '🟡 Starting…', running: '⚪ Running', crashed: '🔴 Crashed', restarting: '🟡 Restarting…' }
   const menu = Menu.buildFromTemplate([
-    {
-      label: 'Show Dashboard', click: () => {
-        if (mainWindow) { mainWindow.show(); mainWindow.focus() }
-        else if (onboardingWindow) { onboardingWindow.show(); onboardingWindow.focus() }
-        else if (splashWindow) { splashWindow.show(); splashWindow.focus() }
-      }
-    },
+    { label: 'Open ClawDesk', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { type: 'separator' },
     { label: `Gateway: ${labels[gateway.currentState]}`, enabled: false },
     { type: 'separator' },
@@ -518,13 +490,20 @@ function setupIPC(): void {
       let ex: any = {}; try { ex = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) } catch { }
 
       const providerKey = (c.provider === 'custom' || c.provider === 'moonshot') ? 'openai' : c.provider
-      const auth: any = { apiKey: c.apiKey }
-      if (c.baseUrl) auth.baseUrl = c.baseUrl
-      else if (c.provider === 'moonshot') auth.baseUrl = 'https://api.moonshot.cn/v1'
+      const profileId = `${providerKey}:default`
+      const authProfile: any = { mode: 'api_key', provider: providerKey }
+      if (c.baseUrl) authProfile.baseUrl = c.baseUrl
+      else if (c.provider === 'moonshot') authProfile.baseUrl = 'https://api.moonshot.cn/v1'
 
       const final = {
         ...ex,
-        auth: { ...ex.auth, [providerKey]: auth },
+        auth: {
+          ...ex.auth,
+          profiles: {
+            ...ex.auth?.profiles,
+            [profileId]: authProfile
+          }
+        },
         tools: {
           profile: c.enableComputerControl ? 'coding' : 'messaging',
           allow: c.enableWebBrowser ? ['browser', 'web_search', 'web_fetch'] : undefined
@@ -539,7 +518,7 @@ function setupIPC(): void {
           ...ex.agents,
           defaults: {
             ...ex.agents?.defaults,
-            sandbox: { enabled: !!c.enableSandbox }
+            sandbox: { mode: c.enableSandbox ? 'all' : 'off' }
           }
         },
         channels: {
@@ -550,9 +529,12 @@ function setupIPC(): void {
             allowFrom: (c.dmPolicy === 'allowlist' && c.allowFrom) ? c.allowFrom.split(',').map(s => s.trim()).filter(Boolean) : undefined
           }
         },
-        tts: {
-          enabled: !!c.enableTTS,
-          provider: c.ttsProvider || 'edge'
+        messages: {
+          ...ex.messages,
+          tts: {
+            auto: c.enableTTS ? 'always' : 'off',
+            provider: c.ttsProvider || 'edge'
+          }
         }
       }
 
@@ -718,9 +700,31 @@ function setupIPC(): void {
     catch (err) { return { success: false, error: String(err) } }
   })
 
-  ipcMain.handle('save-full-config', async (_e: any, config: any) => {
+  ipcMain.handle('save-full-config', async (event: any, config: any) => {
     try {
       writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+
+      // Update auth-profiles.json separately if apiKey is provided
+      if (config.apiKey) {
+        const authProfilesPath = join(process.env.HOME || process.env.USERPROFILE || '', '.openclaw', 'auth-profiles.json')
+        const providerKey = (config.provider === 'custom' || config.provider === 'moonshot') ? 'openai' : config.provider
+        const profileId = `${providerKey}:default`
+
+        let authProfiles: any = { version: 1, profiles: {} }
+        if (existsSync(authProfilesPath)) {
+          try { authProfiles = JSON.parse(readFileSync(authProfilesPath, 'utf8')) } catch (e) { }
+        }
+
+        authProfiles.profiles[profileId] = {
+          type: 'api_key',
+          provider: providerKey,
+          key: config.apiKey
+        }
+
+        writeFileSync(authProfilesPath, JSON.stringify(authProfiles, null, 2))
+      }
+
+      event.sender.send('config-saved', true)
       addLog('[config] Full config saved')
       await gateway.restart()
       return { success: true }
@@ -750,15 +754,7 @@ function generateToken(): string {
 
 // ─── App Lifecycle ──────────────────────────────────────────────────────
 if (!app.requestSingleInstanceLock()) { app.quit() } else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      mainWindow.restore(); mainWindow.show(); mainWindow.focus()
-    } else if (onboardingWindow) {
-      onboardingWindow.restore(); onboardingWindow.show(); onboardingWindow.focus()
-    } else if (splashWindow) {
-      splashWindow.restore(); splashWindow.show(); splashWindow.focus()
-    }
-  })
+  app.on('second-instance', () => { if (mainWindow) { mainWindow.restore(); mainWindow.show(); mainWindow.focus() } else if (onboardingWindow) { onboardingWindow.restore(); onboardingWindow.show(); onboardingWindow.focus() } })
   app.whenReady().then(async () => {
     try { app.setAppUserModelId(APP_ID) } catch { }
     setupIPC(); createTray(); await bootstrapSkills()
