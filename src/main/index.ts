@@ -603,7 +603,6 @@ function createMainWindow(): void {
     mainWindow?.webContents.executeJavaScript(brandingScript)
   })
 
-
   mainWindow.webContents.on('did-fail-load', () => {
     setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL(GATEWAY_URL) }, 2000)
   })
