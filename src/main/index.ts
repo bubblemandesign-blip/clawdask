@@ -6,7 +6,7 @@ const getElectron = () => {
   try {
     const e = require('electron')
     // If e is just an empty object, it means it's still being initialized or poorly bundled
-    if (e && Object.keys(e).length > 0) return e
+    if (e && (e.app || e.default?.app || Object.keys(e).length > 2)) return e
     return e || null
   } catch (err) {
     console.error('[boot] Error requiring electron:', err)
