@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { app } from 'electron'
+import { homedir } from 'node:os'
 
-const CONFIG_DIR = join(app.getPath('home'), '.openclaw')
+const CONFIG_DIR = join(homedir(), '.openclaw')
 const CONFIG_PATH = join(CONFIG_DIR, 'openclaw.json')
 
 /** Removes unrecognized keys that cause OpenClaw to crash */
