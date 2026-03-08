@@ -1,17 +1,11 @@
 // ─── Fix environment BEFORE anything else ───────────────────────────────
 delete process.env['ELECTRON_RUN_AS_NODE']
 
-const {
-  app,
-  shell,
-  BrowserWindow,
-  ipcMain,
-  Tray,
-  Menu,
-  nativeImage,
-  dialog,
-  globalShortcut
-} = require('electron')
+// ─── Electron Resolver (Resilience) ──────────────────────────────────────
+const getElectron = () => {
+  try { return require('electron') } catch { return null }
+}
+const getApp = () => getElectron()?.app
 import { autoUpdater } from 'electron-updater'
 import { join, dirname } from 'path'
 import { ChildProcess, spawn, execSync } from 'child_process'
@@ -323,13 +317,15 @@ class GatewayManager {
   }
 
   findBin(): string | null {
+    const electronApp = getApp()
+    if (!electronApp) return null
     const possiblePaths = [
-      join(app.getAppPath(), 'node_modules', 'openclaw', 'openclaw.mjs'),
+      join(electronApp.getAppPath(), 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(process.resourcesPath, 'app', 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(process.resourcesPath, 'app.asar', 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(dirname(process.execPath), 'resources', 'app.asar.unpacked', 'node_modules', 'openclaw', 'openclaw.mjs'),
-      join(dirname(app.getAppPath()), 'node_modules', 'openclaw', 'openclaw.mjs'),
+      join(dirname(electronApp.getAppPath()), 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(homedir(), '.openclaw', 'bin', 'openclaw.mjs')
     ]
     for (const p of possiblePaths) {
@@ -376,7 +372,10 @@ function hasValidConfig(): boolean {
   }
 }
 
-const getIsDev = (): boolean => !app.isPackaged
+const getIsDev = (): boolean => {
+  const electronApp = getApp()
+  return electronApp ? !electronApp.isPackaged : false
+}
 
 function cleanConfig(config: any): any {
   if (!config) return {}
@@ -405,9 +404,11 @@ function getAutoStartEnabled(): boolean {
 
 function setAutoStart(enabled: boolean): void {
   if (process.platform !== 'win32') return
+  const electronApp = getApp()
+  if (!electronApp) return
   try {
     if (enabled) {
-      const exePath = app.getPath('exe')
+      const exePath = electronApp.getPath('exe')
       execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawDesk /t REG_SZ /d "\\"${exePath}\\" --minimized" /f`, { stdio: 'ignore' })
     } else {
       execSync('reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawDesk /f', { stdio: 'ignore' })
@@ -417,6 +418,9 @@ function setAutoStart(enabled: boolean): void {
 
 // ─── Splash Screen ──────────────────────────────────────────────────────
 function createSplashWindow(): void {
+  const electron = getElectron()
+  if (!electron) return
+  const { BrowserWindow } = electron
   splashWindow = new BrowserWindow({
     width: 380, height: 280, frame: false, transparent: true,
     resizable: false, alwaysOnTop: true, skipTaskbar: true,
@@ -428,6 +432,9 @@ function createSplashWindow(): void {
 
 // ─── Onboarding ─────────────────────────────────────────────────────────
 function createOnboardingWindow(): void {
+  const electron = getElectron()
+  if (!electron) return
+  const { BrowserWindow } = electron
   onboardingWindow = new BrowserWindow({
     width: 520, height: 620, frame: false, resizable: false, transparent: true,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
@@ -442,6 +449,9 @@ function createOnboardingWindow(): void {
 
 // ─── Main Window ────────────────────────────────────────────────────────
 function createMainWindow(): void {
+  const electron = getElectron()
+  if (!electron) return
+  const { BrowserWindow } = electron
   mainWindow = new BrowserWindow({
     width: 1100, height: 750, minWidth: 800, minHeight: 600,
     show: false, autoHideMenuBar: true, title: 'ClawDesk',
@@ -463,7 +473,8 @@ function createMainWindow(): void {
   mainWindow.on('closed', () => { mainWindow = null })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    const electron = getElectron()
+    if (electron) electron.shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
@@ -600,6 +611,9 @@ function createMainWindow(): void {
 
 // ─── System Tray ────────────────────────────────────────────────────────
 function createTray(): void {
+  const electron = getElectron()
+  if (!electron) return
+  const { nativeImage, Tray } = electron
   const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAARklEQVQ4y2NgGAUowMjIyMDAwMBwHpcCFgYGBgVcGpiwKWBiYGBQwKeBBZsCJnwaWHBpYMKlATkQ8WlgwaeBBZ8GFnwOAQBYjAf3C2TzlgAAAABJRU5ErkJggg==')
   tray = new Tray(icon)
   tray.setToolTip('ClawDesk')
@@ -609,6 +623,9 @@ function createTray(): void {
 
 function createTrayMenu(): void {
   if (!tray) return
+  const electron = getElectron()
+  if (!electron) return
+  const { Menu, shell, dialog, app } = electron
   const labels: any = { stopped: '⚫ Stopped', starting: '🟡 Starting…', running: '⚪ Running', crashed: '🔴 Crashed', restarting: '🟡 Restarting…' }
   const menu = Menu.buildFromTemplate([
     { label: 'Open ClawDesk', click: () => { mainWindow?.show(); mainWindow?.focus() } },
@@ -630,6 +647,9 @@ function createTrayMenu(): void {
 
 // ─── IPC ────────────────────────────────────────────────────────────────
 function setupIPC(): void {
+  const electron = getElectron()
+  if (!electron) return
+  const { ipcMain } = electron
   ipcMain.handle('check-openclaw', async () => ({ installed: !!gateway.findBin(), path: gateway.findBin() }))
   ipcMain.handle('save-config', async (_e, c: any) => {
     try {
@@ -880,7 +900,8 @@ function setupIPC(): void {
 
   // ─── Phase S: Update ─────────────────────────────────────────────
   ipcMain.handle('run-update', async () => {
-    if (app.isPackaged) {
+    const electronApp = getApp()
+    if (electronApp?.isPackaged) {
       return autoUpdater.checkForUpdatesAndNotify()
     }
     return runCLI(['update'])
@@ -901,6 +922,14 @@ function generateToken(): string {
 
 // ─── App Lifecycle ──────────────────────────────────────────────────────
 const startApp = () => {
+  const electron = getElectron()
+  if (!electron) {
+    console.error('[boot] Electron module not found, retrying...')
+    setTimeout(startApp, 100)
+    return
+  }
+  const { app, globalShortcut, BrowserWindow } = electron
+
   let hasLock = false
   try { hasLock = app.requestSingleInstanceLock() } catch { hasLock = true }
 
