@@ -900,7 +900,10 @@ function generateToken(): string {
 }
 
 // ─── App Lifecycle ──────────────────────────────────────────────────────
-if (!app.requestSingleInstanceLock()) { app.quit() } else {
+let hasLock = false
+try { hasLock = app.requestSingleInstanceLock() } catch { hasLock = true }
+
+if (!hasLock) { app.quit() } else {
   app.on('second-instance', () => { if (mainWindow) { mainWindow.restore(); mainWindow.show(); mainWindow.focus() } else if (onboardingWindow) { onboardingWindow.restore(); onboardingWindow.show(); onboardingWindow.focus() } })
   app.whenReady().then(async () => {
     try { app.setAppUserModelId(APP_ID) } catch { }
