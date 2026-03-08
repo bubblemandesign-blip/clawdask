@@ -900,11 +900,24 @@ function generateToken(): string {
 }
 
 // ─── App Lifecycle ──────────────────────────────────────────────────────
-let hasLock = false
-try { hasLock = app.requestSingleInstanceLock() } catch { hasLock = true }
+const startApp = () => {
+  let hasLock = false
+  try { hasLock = app.requestSingleInstanceLock() } catch { hasLock = true }
 
-if (!hasLock) { app.quit() } else {
-  app.on('second-instance', () => { if (mainWindow) { mainWindow.restore(); mainWindow.show(); mainWindow.focus() } else if (onboardingWindow) { onboardingWindow.restore(); onboardingWindow.show(); onboardingWindow.focus() } })
+  if (!hasLock) {
+    app.quit()
+    return
+  }
+
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show(); mainWindow.focus()
+    } else if (onboardingWindow) {
+      if (onboardingWindow.isMinimized()) onboardingWindow.restore()
+      onboardingWindow.show(); onboardingWindow.focus()
+    }
+  })
   app.whenReady().then(async () => {
     try { app.setAppUserModelId(APP_ID) } catch { }
     setupIPC(); createTray(); await bootstrapSkills()
@@ -950,3 +963,6 @@ if (!hasLock) { app.quit() } else {
   app.on('window-all-closed', () => { })
   app.on('before-quit', () => { isQuitting = true; gateway.stop() })
 }
+
+// Initial Kick-off with a safety delay
+setTimeout(startApp, 100)
