@@ -7,15 +7,25 @@ const getElectron = () => {
     // Try direct require first
     const e = require('electron')
     if (e && (e.app || e.default?.app)) return e
-    return null
-  } catch {
+    return e || null
+  } catch (err) {
+    console.error('[boot] Error requiring electron:', err)
     return null
   }
 }
+
 const getApp = () => {
   const e = getElectron()
   if (!e) return null
-  return e.app || e.default?.app || null
+  const app = e.app || e.default?.app
+  if (!app) {
+    // Ultimate fallback: check if 'app' is available on 'require' result directly
+    try {
+      const electron = require('electron')
+      return electron.app || electron.default?.app || null
+    } catch { return null }
+  }
+  return app
 }
 
 import { autoUpdater } from 'electron-updater'
