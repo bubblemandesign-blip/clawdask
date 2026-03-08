@@ -13,7 +13,7 @@ const {
   globalShortcut
 } = require('electron')
 import { autoUpdater } from 'electron-updater'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { ChildProcess, spawn, execSync } from 'child_process'
 import { existsSync, mkdirSync, writeFileSync, readFileSync, renameSync } from 'fs'
 import { homedir } from 'os'
@@ -54,13 +54,83 @@ class GatewayManager {
   private restartCount = 0
   private maxRestarts = 3
   private restartDelay = 2000
+  private lastCrashTime = 0
+  private crashFrequency = 0
+  private watchdogInterval: NodeJS.Timeout | null = null
 
   get isRunning(): boolean { return this.state === 'running' }
   get currentState(): GatewayState { return this.state }
   get pid(): number | undefined { return this.process?.pid }
 
+  private ensureEnvironment(): void {
+    const subdirs = [
+      'agents/main/sessions',
+      'credentials',
+      'canvas',
+      'logs',
+      'skills',
+      'tmp',
+      'cache',
+      'profiles'
+    ]
+    if (!existsSync(OPENCLAW_DIR)) mkdirSync(OPENCLAW_DIR, { recursive: true })
+    subdirs.forEach(d => {
+      const p = join(OPENCLAW_DIR, d)
+      if (!existsSync(p)) mkdirSync(p, { recursive: true })
+    })
+    addLog('[env] Multi-layer environment verification complete')
+  }
+
+  private preStartConfigCleanup(): void {
+    if (!existsSync(CONFIG_PATH)) return
+    try {
+      let config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'))
+      let changed = false
+
+      // 1. Ensure Top-Level Structure
+      const defaults = { auth: {}, agents: { defaults: { sandbox: { mode: 'off' } } }, skills: { entries: {} } }
+      Object.keys(defaults).forEach(key => {
+        if (!config[key]) {
+          config[key] = defaults[key]
+          changed = true
+          addLog(`[sentinel] Injected missing config key: ${key}`)
+        }
+      })
+
+      // 2. Docker Probe for Sandbox Safety
+      let hasDocker = false
+      try {
+        execSync('docker --version', { stdio: 'ignore' })
+        hasDocker = true
+      } catch { hasDocker = false }
+
+      if (!hasDocker && config.agents?.defaults?.sandbox?.mode === 'all') {
+        config.agents.defaults.sandbox.mode = 'off'
+        changed = true
+        addLog('[sentinel] Docker missing: Forcing sandbox mode to OFF')
+      }
+
+      if (changed) writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+    } catch (e) { console.error('[config:sentinel] Error:', e) }
+  }
+
+  private startWatchdog(): void {
+    if (this.watchdogInterval) clearInterval(this.watchdogInterval)
+    this.watchdogInterval = setInterval(async () => {
+      if (this.state === 'running') {
+        const alive = await this.verifyGateway()
+        if (!alive) {
+          addLog('[watchdog] Liveness probe failed — attempting auto-revive')
+          this.restart()
+        }
+      }
+    }, 60000) // Pulse check every 60s
+  }
+
   async start(): Promise<boolean> {
     if (this.state === 'running' || this.state === 'starting') return true
+
+    await this.cleanupZombies()
 
     const bin = this.findBin()
     if (!bin) {
@@ -75,7 +145,13 @@ class GatewayManager {
     }
 
     this.state = 'starting'
+    this.ensureEnvironment()
+    this.preStartConfigCleanup()
     console.log(`[gateway] Starting: ${bin}`)
+
+    const logPath = join(OPENCLAW_DIR, 'logs', 'gateway_error.log')
+    const errorLog = require('fs').createWriteStream(logPath, { flags: 'a' })
+    errorLog.write(`\n--- [${new Date().toISOString()}] Starting Gateway ---\n`)
 
     this.process = spawn(process.execPath, [bin, 'gateway'], {
       env: {
@@ -95,6 +171,7 @@ class GatewayManager {
       const s = d.toString()
       console.error(`[gateway:err] ${s.trim()}`)
       addLog(`ERROR: ${s}`)
+      errorLog.write(s)
     })
 
     this.process.on('exit', (code) => {
@@ -118,6 +195,7 @@ class GatewayManager {
       GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`
       this.state = 'running'
       this.restartCount = 0
+      this.startWatchdog()
       this.updateTray()
       return true
     }
@@ -138,7 +216,57 @@ class GatewayManager {
       }
       this.process = null
     }
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval)
+      this.watchdogInterval = null
+    }
     this.updateTray()
+  }
+
+  private async cleanupZombies(): Promise<void> {
+    if (process.platform !== 'win32') return
+    try {
+      // 1. Kill any existing openclaw or node processes that might be hanging
+      const cmd = `taskkill /F /IM openclaw.exe /T /FI "STATUS eq RUNNING"`
+      execSync(cmd, { stdio: 'ignore' })
+
+      // 2. Identify if anything is on our port
+      try {
+        const portInfo = execSync(`netstat -ano | findstr :${GATEWAY_PORT}`, { encoding: 'utf-8' })
+        if (portInfo.trim()) {
+          const lines = portInfo.trim().split('\n')
+          lines.forEach(line => {
+            const parts = line.trim().split(/\s+/)
+            const pid = parts[parts.length - 1]
+            if (pid && !isNaN(parseInt(pid)) && parseInt(pid) !== process.pid) {
+              addLog(`[proc] Killing process ${pid} on port ${GATEWAY_PORT}`)
+              execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore' })
+            }
+          })
+        }
+      } catch (e) { /* Likely no process found */ }
+
+      addLog('[proc] Zombie & Port cleanup complete')
+    } catch { }
+  }
+
+  private enterSafeMode(): void {
+    addLog('[safe-mode] Entering Safe Mode due to frequent crashes')
+    this.state = 'crashed'
+    if (tray) {
+      tray.displayBalloon({
+        title: 'ClawDesk Safe Mode',
+        content: 'Gateway is crashing repeatedly. Settings have been reset to safe defaults.'
+      })
+    }
+    // Force safe config
+    if (existsSync(CONFIG_PATH)) {
+      try {
+        const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'))
+        if (config.agents?.defaults?.sandbox) config.agents.defaults.sandbox.mode = 'off'
+        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+      } catch { }
+    }
   }
 
   async restart(): Promise<boolean> {
@@ -148,6 +276,19 @@ class GatewayManager {
   }
 
   private async handleCrash(): Promise<void> {
+    const now = Date.now()
+    if (now - this.lastCrashTime < 60000) {
+      this.crashFrequency++
+    } else {
+      this.crashFrequency = 1
+    }
+    this.lastCrashTime = now
+
+    if (this.crashFrequency >= 3) {
+      this.enterSafeMode()
+      return
+    }
+
     if (this.restartCount >= this.maxRestarts) {
       console.error(`[gateway] Max restarts (${this.maxRestarts}) reached`)
       this.updateTray()
@@ -186,9 +327,14 @@ class GatewayManager {
       join(app.getAppPath(), 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(process.resourcesPath, 'app', 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'openclaw', 'openclaw.mjs'),
-      join(process.resourcesPath, 'app.asar', 'node_modules', 'openclaw', 'openclaw.mjs')
+      join(process.resourcesPath, 'app.asar', 'node_modules', 'openclaw', 'openclaw.mjs'),
+      join(dirname(process.execPath), 'resources', 'app.asar.unpacked', 'node_modules', 'openclaw', 'openclaw.mjs'),
+      join(dirname(app.getAppPath()), 'node_modules', 'openclaw', 'openclaw.mjs'),
+      join(homedir(), '.openclaw', 'bin', 'openclaw.mjs')
     ]
-    for (const p of possiblePaths) { if (existsSync(p)) return p }
+    for (const p of possiblePaths) {
+      try { if (existsSync(p)) return p } catch { }
+    }
     return null
   }
 }
@@ -471,6 +617,7 @@ function createTrayMenu(): void {
     { type: 'separator' },
     { label: 'Restart Gateway', click: async () => { await gateway.restart() } },
     { label: 'Run Diagnostics', click: () => { try { const bin = gateway.findBin(); if (bin) spawn(bin, ['doctor'], { shell: true, stdio: 'inherit' }) } catch { } } },
+    { label: 'Open Error Logs', click: () => { shell.openPath(join(OPENCLAW_DIR, 'logs', 'gateway_error.log')) } },
     { type: 'separator' },
     { label: 'Start with Windows', type: 'checkbox', checked: getAutoStartEnabled(), click: (i) => setAutoStart(i.checked) },
     { type: 'separator' },
@@ -518,7 +665,7 @@ function setupIPC(): void {
           ...ex.agents,
           defaults: {
             ...ex.agents?.defaults,
-            sandbox: { mode: c.enableSandbox ? 'all' : 'off' }
+            sandbox: { mode: (c.enableSandbox && existsSync('C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe')) ? 'all' : 'off' }
           }
         },
         channels: {
@@ -767,8 +914,27 @@ if (!app.requestSingleInstanceLock()) { app.quit() } else {
       }
     })
 
-    if (hasValidConfig()) { if (!isMinimized) createSplashWindow(); if (await gateway.start()) { if (!isMinimized) createMainWindow() } else { splashWindow?.close(); if (!isMinimized) createOnboardingWindow() } }
-    else { if (!isMinimized) createOnboardingWindow() }
+    if (hasValidConfig()) {
+      if (!isMinimized) createSplashWindow()
+      // Run gateway start in background or with a shorter wait for the splash
+      gateway.start().then((started) => {
+        if (!started) {
+          addLog('[start] Gateway failed to start, but opening UI for diagnostics.')
+        }
+        splashWindow?.close()
+        if (!isMinimized && !mainWindow) createMainWindow()
+      })
+
+      // Safety timeout: if gateway is taking too long, show UI anyway
+      setTimeout(() => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.close()
+          if (!mainWindow && !isMinimized) createMainWindow()
+        }
+      }, 5000)
+    } else {
+      if (!isMinimized) createOnboardingWindow()
+    }
 
     // Check for updates on startup if packaged
     if (app.isPackaged) {
