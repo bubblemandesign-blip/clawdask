@@ -3,9 +3,13 @@ delete process.env['ELECTRON_RUN_AS_NODE']
 
 // ─── Electron Resolver (Resilience) ──────────────────────────────────────
 const getElectron = () => {
-  try { return require('electron') } catch { return null }
+  try { return (typeof require !== 'undefined') ? require('electron') : null } catch { return null }
 }
-const getApp = () => getElectron()?.app
+const getApp = () => {
+  const e = getElectron()
+  return e && e.app ? e.app : null
+}
+
 import { autoUpdater } from 'electron-updater'
 import { join, dirname } from 'path'
 import { ChildProcess, spawn, execSync } from 'child_process'
