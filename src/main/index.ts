@@ -4,9 +4,9 @@ delete process.env['ELECTRON_RUN_AS_NODE']
 // ─── Electron Resolver (Resilience) ──────────────────────────────────────
 const getElectron = () => {
   try {
-    // Try direct require first
     const e = require('electron')
-    if (e && (e.app || e.default?.app)) return e
+    // If e is just an empty object, it means it's still being initialized or poorly bundled
+    if (e && Object.keys(e).length > 0) return e
     return e || null
   } catch (err) {
     console.error('[boot] Error requiring electron:', err)
@@ -15,17 +15,18 @@ const getElectron = () => {
 }
 
 const getApp = () => {
-  const e = getElectron()
-  if (!e) return null
-  const app = e.app || e.default?.app
-  if (!app) {
-    // Ultimate fallback: check if 'app' is available on 'require' result directly
-    try {
-      const electron = require('electron')
-      return electron.app || electron.default?.app || null
-    } catch { return null }
-  }
-  return app
+  try {
+    const e = getElectron()
+    if (!e) return null
+    // Try all possible ways to find 'app'
+    const app = e.app || e.default?.app || (e as any).remote?.app
+    if (app) return app
+
+    // Last-ditch: maybe it's the default export itself?
+    if (typeof e === 'function' && (e as any).app) return (e as any).app
+
+    return null
+  } catch { return null }
 }
 
 import { autoUpdater } from 'electron-updater'
