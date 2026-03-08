@@ -922,8 +922,8 @@ function generateToken(): string {
 // ─── App Lifecycle ──────────────────────────────────────────────────────
 const startApp = () => {
   const electron = getElectron()
-  if (!electron) {
-    console.error('[boot] Electron module not found, retrying...')
+  if (!electron || !electron.app) {
+    console.error('[boot] Electron app module not yet available, retrying...')
     setTimeout(startApp, 100)
     return
   }
