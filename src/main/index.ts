@@ -1152,6 +1152,13 @@ function setupIPC(): void {
     }
   })
 
+  safeHandle('get-all-local-ai-status', async () => {
+    return {
+      engineInstalled: localAIManager.isEngineInstalled(),
+      models: localAIManager.getAllModelsStatus()
+    }
+  })
+
   safeHandle('download-local-engine', async (e) => {
     return await localAIManager.downloadEngine((percent, text) => {
       e.sender.send('local-ai-download-progress', { type: 'engine', percent, text })

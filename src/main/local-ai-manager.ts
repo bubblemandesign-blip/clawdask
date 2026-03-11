@@ -47,6 +47,13 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     filename: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
     url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
     sizeBytes: 800000000
+  },
+  {
+    id: 'llama3.1-8b',
+    name: 'Llama 3.1 8B (Classic)',
+    filename: 'Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
+    sizeBytes: 4900000000
   }
 ]
 
@@ -75,6 +82,14 @@ export class LocalAIManager {
     const preset = AVAILABLE_MODELS.find(m => m.id === modelId)
     if (!preset) return false
     return fs.existsSync(path.join(MODELS_DIR, preset.filename))
+  }
+
+  public getAllModelsStatus(): Record<string, boolean> {
+    const status: Record<string, boolean> = {}
+    for (const model of AVAILABLE_MODELS) {
+      status[model.id] = fs.existsSync(path.join(MODELS_DIR, model.filename))
+    }
+    return status
   }
 
   // Wait for server to bind to port and respond

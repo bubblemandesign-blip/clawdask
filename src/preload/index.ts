@@ -10,9 +10,11 @@ const clawdeskAPI = {
   checkModel: (name: string) => ipcRenderer.invoke('check-model', name),
   pullModel: (name: string) => ipcRenderer.invoke('pull-model', name),
   listModels: () => ipcRenderer.invoke('list-models'),
+  saveApiKey: (provider: string, key: string) => ipcRenderer.invoke('save-api-key', provider, key),
 
   // Embedded AI
   getLocalAiStatus: (modelId: string) => ipcRenderer.invoke('get-local-ai-status', modelId),
+  getLocalAiAllStatus: () => ipcRenderer.invoke('get-all-local-ai-status'),
   downloadLocalEngine: () => ipcRenderer.invoke('download-local-engine'),
   downloadLocalModel: (modelId: string) => ipcRenderer.invoke('download-local-model', modelId),
 

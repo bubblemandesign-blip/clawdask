@@ -111,14 +111,10 @@ function isModelDownloaded(ollamaName: string): boolean {
   })
 }
 
+const localModelsMap = ref<Record<string, boolean>>({})
+
 function isEmbeddedDownloaded(modelId: string): boolean {
-  // If we've checked, use the boolean flags. 
-  // This is a bit reactive-complex but works for the list display.
-  if (modelId === 'phi3-mini' && selectedModel.value === 'local/phi3-mini') return embeddedModelInstalled.value
-  if (modelId === 'glm-4-9b' && selectedModel.value === 'local/glm-4-9b') return embeddedModelInstalled.value
-  // For others or non-selected, we could call an IPC but it's expensive in a list.
-  // We'll rely on the manual check done during 'refreshEmbeddedStatus' for the active one.
-  return false 
+  return localModelsMap.value[modelId] || false
 }
 
 const modelVersions = computed<Record<string, { id: string, name: string }[]>>(() => {
@@ -184,6 +180,7 @@ const modelVersions = computed<Record<string, { id: string, name: string }[]>>((
       { id: 'local/phi3-mini', name: 'Phi-3 Mini (Fast) - 2.4GB' + (isEmbeddedDownloaded('phi3-mini') ? ' ✅' : '') },
       { id: 'local/glm-4-9b', name: 'GLM-4 9B (Smart) - 5.5GB' + (isEmbeddedDownloaded('glm-4-9b') ? ' ✅' : '') },
       { id: 'local/deepseek-r1-7b', name: 'DeepSeek R1 7B (Reasoning) - 4.7GB' + (isEmbeddedDownloaded('deepseek-r1-7b') ? ' ✅' : '') },
+      { id: 'local/llama3.1-8b', name: 'Llama 3.1 8B (Classic) - 4.9GB' + (isEmbeddedDownloaded('llama3.1-8b') ? ' ✅' : '') },
       { id: 'local/llama3.2-1b', name: 'Llama 3.2 1B (Ultra Fast) - 0.8GB' + (isEmbeddedDownloaded('llama3.2-1b') ? ' ✅' : '') }
     ],
     ollama: [
@@ -293,9 +290,10 @@ async function refreshEmbeddedStatus() {
   if (provider.value !== 'embedded') return
   const modelId = selectedModel.value.replace('local/', '') || 'glm-4-9b'
   embeddedChecked.value = false
-  const status = await api.getLocalAiStatus(modelId)
+  const status = await api.getLocalAiAllStatus()
   embeddedEngineInstalled.value = status.engineInstalled
-  embeddedModelInstalled.value = status.modelInstalled
+  localModelsMap.value = status.models || {}
+  embeddedModelInstalled.value = localModelsMap.value[modelId] || false
   embeddedChecked.value = true
 }
 
