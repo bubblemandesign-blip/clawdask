@@ -392,9 +392,17 @@ async function saveAndStart() {
   errorMessage.value = ''
 
   try {
+    if (provider.value === 'ollama') {
+      await api.saveApiKey('ollama', 'ollama-local')
+    } else if (provider.value === 'embedded') {
+      await api.saveApiKey('custom', 'local-embedded')
+    } else if (apiKey.value.trim()) {
+      await api.saveApiKey(provider.value, apiKey.value.trim())
+    }
+
     const config: any = {
       provider: provider.value,
-      apiKey: apiKey.value.trim(),
+      apiKey: apiKey.value.trim() || 'local',
       enableWebBrowser: enableWebBrowser.value,
       enableComputerControl: enableComputerControl.value,
       dmPolicy: dmPolicy.value,
