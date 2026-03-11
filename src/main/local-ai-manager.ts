@@ -7,8 +7,8 @@ import { app } from 'electron'
 const ENGINE_DIR = path.join(app.getPath('userData'), 'engine')
 const MODELS_DIR = path.join(ENGINE_DIR, 'models')
 
-// Use a static build of llama-server for Windows
-const SERVER_URL = 'https://github.com/ggerganov/llama.cpp/releases/download/b3744/llama-b3744-bin-win-vulcan-x64.zip'
+// Use latest stable build of llama-server for Windows (CPU - universal compatibility)
+const SERVER_URL = 'https://github.com/ggml-org/llama.cpp/releases/download/b8272/llama-b8272-bin-win-cpu-x64.zip'
 
 export interface ModelPreset {
   id: string
@@ -33,6 +33,20 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     filename: 'glm-4-9b-chat.Q4_K_M.gguf',
     url: 'https://huggingface.co/lmstudio-community/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q4_K_M.gguf',
     sizeBytes: 5500000000 
+  },
+  {
+    id: 'deepseek-r1-7b',
+    name: 'DeepSeek R1 7B (Reasoning)',
+    filename: 'DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf',
+    sizeBytes: 4700000000
+  },
+  {
+    id: 'llama3.2-1b',
+    name: 'Llama 3.2 1B (Ultra Fast)',
+    filename: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+    sizeBytes: 800000000
   }
 ]
 
@@ -145,10 +159,23 @@ export class LocalAIManager {
 
   private downloadFileWithProgress(url: string, dest: string, onProgress?: (p: number, mbytes: string) => void): Promise<boolean> {
     return new Promise((resolve) => {
-      https.get(url, (response) => {
-        if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 303 || response.statusCode === 307) {
-          return resolve(this.downloadFileWithProgress(response.headers.location!, dest, onProgress))
+      const protocol = url.startsWith('https') ? https : require('http')
+      const options = {
+        headers: {
+          'User-Agent': 'ClawDesk-AI-Manager/1.0'
         }
+      }
+
+      protocol.get(url, options, (response) => {
+        // Handle all common redirect codes (301, 302, 303, 307, 308)
+        if ([301, 302, 303, 307, 308].includes(response.statusCode || 0)) {
+          const newUrl = response.headers.location
+          if (newUrl) {
+            // Recurse with new URL
+            return resolve(this.downloadFileWithProgress(newUrl, dest, onProgress))
+          }
+        }
+
         if (response.statusCode !== 200) {
           console.error(`[LocalAI] Download failed with status ${response.statusCode} from ${url}`)
           return resolve(false)
@@ -181,12 +208,13 @@ export class LocalAIManager {
 
         file.on('error', (err) => {
           console.error('[LocalAI] File write error:', err)
-          fs.unlink(dest, () => {})
+          file.close()
+          if (fs.existsSync(dest)) fs.unlinkSync(dest)
           resolve(false)
         })
       }).on('error', (err) => {
-        console.error('[LocalAI] HTTPS request error:', err)
-        fs.unlink(dest, () => {})
+        console.error('[LocalAI] Request error:', err)
+        if (fs.existsSync(dest)) fs.unlinkSync(dest)
         resolve(false)
       })
     })
@@ -203,21 +231,74 @@ export class LocalAIManager {
       onProgress?.(p, `Downloading Core Engine... ${text}`)
     })
 
-    if (!success) return false
+    if (!success) {
+      console.error('[LocalAI] Engine download failed!')
+      return false
+    }
     
     onProgress?.(100, 'Extracting Engine...')
     
-    return new Promise((resolve) => {
-      const psScript = `Expand-Archive -Path "${zipPath}" -DestinationPath "${ENGINE_DIR}" -Force; Remove-Item "${zipPath}"`
+    // Extract ZIP
+    const extractDir = path.join(ENGINE_DIR, '_extract')
+    const extracted = await new Promise<boolean>((resolve) => {
+      const psScript = `Expand-Archive -Path "${zipPath}" -DestinationPath "${extractDir}" -Force`
       const p = spawn('powershell.exe', ['-NoProfile', '-Command', psScript], { windowsHide: true })
-      p.on('close', (code) => {
-        if (code === 0 && this.isEngineInstalled()) {
-          resolve(true)
-        } else {
-          resolve(false)
-        }
-      })
+      p.on('close', (code) => resolve(code === 0))
     })
+
+    // Clean up ZIP
+    try { if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath) } catch {}
+
+    if (!extracted || !fs.existsSync(extractDir)) {
+      console.error('[LocalAI] ZIP extraction failed')
+      return false
+    }
+
+    // Recursively find llama-server.exe inside the extracted tree
+    const findExe = (dir: string): string | null => {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name)
+          if (entry.isDirectory()) {
+            const found = findExe(fullPath)
+            if (found) return found
+          } else if (entry.name.toLowerCase() === 'llama-server.exe') {
+            return fullPath
+          }
+        }
+      } catch {}
+      return null
+    }
+
+    const exePath = findExe(extractDir)
+    if (!exePath) {
+      console.error('[LocalAI] llama-server.exe not found inside ZIP!')
+      try { fs.rmSync(extractDir, { recursive: true, force: true }) } catch {}
+      return false
+    }
+
+    // Move llama-server.exe and all sibling files (DLLs etc.) to ENGINE_DIR
+    const exeDir = path.dirname(exePath)
+    try {
+      const siblings = fs.readdirSync(exeDir)
+      for (const file of siblings) {
+        const src = path.join(exeDir, file)
+        const dest = path.join(ENGINE_DIR, file)
+        if (fs.statSync(src).isFile()) {
+          fs.copyFileSync(src, dest)
+        }
+      }
+    } catch (e) {
+      console.error('[LocalAI] Failed to move engine files:', e)
+    }
+
+    // Clean up extracted directory
+    try { fs.rmSync(extractDir, { recursive: true, force: true }) } catch {}
+
+    const installed = this.isEngineInstalled()
+    console.log(`[LocalAI] Engine installed: ${installed}`)
+    return installed
   }
 
   public async downloadModel(modelId: string, onProgress?: (percent: number, text: string) => void): Promise<boolean> {

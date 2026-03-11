@@ -111,6 +111,16 @@ function isModelDownloaded(ollamaName: string): boolean {
   })
 }
 
+function isEmbeddedDownloaded(modelId: string): boolean {
+  // If we've checked, use the boolean flags. 
+  // This is a bit reactive-complex but works for the list display.
+  if (modelId === 'phi3-mini' && selectedModel.value === 'local/phi3-mini') return embeddedModelInstalled.value
+  if (modelId === 'glm-4-9b' && selectedModel.value === 'local/glm-4-9b') return embeddedModelInstalled.value
+  // For others or non-selected, we could call an IPC but it's expensive in a list.
+  // We'll rely on the manual check done during 'refreshEmbeddedStatus' for the active one.
+  return false 
+}
+
 const modelVersions = computed<Record<string, { id: string, name: string }[]>>(() => {
   return {
     anthropic: [
@@ -171,8 +181,10 @@ const modelVersions = computed<Record<string, { id: string, name: string }[]>>((
       { id: 'moonshot/moonshot-v1-128k', name: 'Moonshot V1 (128K Context)' }
     ],
     embedded: [
-      { id: 'local/phi3-mini', name: 'Phi-3 Mini (Fast) - 2.4GB' },
-      { id: 'local/glm-4-9b', name: 'GLM-4 9B (Smart) - 5.5GB' }
+      { id: 'local/phi3-mini', name: 'Phi-3 Mini (Fast) - 2.4GB' + (isEmbeddedDownloaded('phi3-mini') ? ' ✅' : '') },
+      { id: 'local/glm-4-9b', name: 'GLM-4 9B (Smart) - 5.5GB' + (isEmbeddedDownloaded('glm-4-9b') ? ' ✅' : '') },
+      { id: 'local/deepseek-r1-7b', name: 'DeepSeek R1 7B (Reasoning) - 4.7GB' + (isEmbeddedDownloaded('deepseek-r1-7b') ? ' ✅' : '') },
+      { id: 'local/llama3.2-1b', name: 'Llama 3.2 1B (Ultra Fast) - 0.8GB' + (isEmbeddedDownloaded('llama3.2-1b') ? ' ✅' : '') }
     ],
     ollama: [
       { id: 'ollama/glm4', name: 'GLM-4 9B' + vramTag(4) + (isModelDownloaded('glm4') ? ' ✅' : '') },
@@ -421,6 +433,8 @@ async function saveAndStart() {
     
     if (isCustom.value) {
       config.baseUrl = customBaseUrl.value.trim()
+    } else if (provider.value === 'embedded') {
+      config.baseUrl = 'http://127.0.0.1:8080/v1'
     }
 
     const saveResult = await api.saveConfig(config)
