@@ -175,7 +175,7 @@ const modelVersions = computed<Record<string, { id: string, name: string }[]>>((
       { id: 'local/glm-4-9b', name: 'GLM-4 9B (Smart) - 5.5GB' }
     ],
     ollama: [
-      { id: 'ollama/glm4:9b', name: 'GLM-4 9B' + vramTag(4) + (isModelDownloaded('glm4:9b') ? ' ✅' : '') },
+      { id: 'ollama/glm4', name: 'GLM-4 9B' + vramTag(4) + (isModelDownloaded('glm4') ? ' ✅' : '') },
       { id: 'ollama/qwen2.5', name: 'Qwen 2.5 7B' + vramTag(4) + (isModelDownloaded('qwen2.5') ? ' ✅' : '') },
       { id: 'ollama/phi4', name: 'Phi-4 14B' + vramTag(6) + (isModelDownloaded('phi4') ? ' ✅' : '') },
       { id: 'ollama/gemma2', name: 'Gemma 2 9B' + vramTag(5) + (isModelDownloaded('gemma2') ? ' ✅' : '') },
@@ -238,7 +238,7 @@ async function refreshOllamaStatus() {
 
 async function checkModelStatus() {
   if (provider.value !== 'ollama') return
-  const modelName = selectedModel.value.split('/')[1] || 'glm4:9b'
+  const modelName = selectedModel.value.split('/')[1] || 'glm4'
   const result = await api.checkModel(modelName)
   ollamaInstalled.value = result.ollamaInstalled ?? true
   ollamaRunning.value = result.ollamaRunning
@@ -250,7 +250,7 @@ async function checkModelStatus() {
 }
 
 async function startModelPull() {
-  const modelName = selectedModel.value.split('/')[1] || 'glm4:9b'
+  const modelName = selectedModel.value.split('/')[1] || 'glm4'
   isPulling.value = true
   pullProgress.value = 0
   pullStatus.value = 'Initializing...'
