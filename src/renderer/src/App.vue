@@ -26,6 +26,7 @@ const isDownloadingEmbedded = ref(false)
 const embeddedProgress = ref(0)
 const embeddedStatus = ref('')
 const embeddedChecked = ref(false)
+const embeddedError = ref('')
 
 // Rotating quotes
 const currentQuote = ref('')
@@ -177,11 +178,19 @@ const modelVersions = computed<Record<string, { id: string, name: string }[]>>((
       { id: 'moonshot/moonshot-v1-128k', name: 'Moonshot V1 (128K Context)' }
     ],
     embedded: [
-      { id: 'local/phi3-mini', name: 'Phi-3 Mini (Fast) - 2.4GB' + (isEmbeddedDownloaded('phi3-mini') ? ' ✅' : '') },
-      { id: 'local/glm-4-9b', name: 'GLM-4 9B (Smart) - 5.5GB' + (isEmbeddedDownloaded('glm-4-9b') ? ' ✅' : '') },
-      { id: 'local/deepseek-r1-7b', name: 'DeepSeek R1 7B (Reasoning) - 4.7GB' + (isEmbeddedDownloaded('deepseek-r1-7b') ? ' ✅' : '') },
-      { id: 'local/llama3.1-8b', name: 'Llama 3.1 8B (Classic) - 4.9GB' + (isEmbeddedDownloaded('llama3.1-8b') ? ' ✅' : '') },
-      { id: 'local/llama3.2-1b', name: 'Llama 3.2 1B (Ultra Fast) - 0.8GB' + (isEmbeddedDownloaded('llama3.2-1b') ? ' ✅' : '') }
+      // Fast & Light
+      { id: 'local/gemma2-2b', name: '⚡ Gemma 2 2B (Ultra Fast) - 1.6GB' + (isEmbeddedDownloaded('gemma2-2b') ? ' ✅' : '') },
+      { id: 'local/phi3-mini', name: '⚡ Phi-3 Mini (Fast) - 2.4GB' + (isEmbeddedDownloaded('phi3-mini') ? ' ✅' : '') },
+      { id: 'local/qwen2.5-3b', name: '⚡ Qwen 2.5 3B (Smart & Fast) - 2.1GB' + (isEmbeddedDownloaded('qwen2.5-3b') ? ' ✅' : '') },
+      // Balanced
+      { id: 'local/qwen2.5-7b', name: '🔥 Qwen 2.5 7B (Best Balance) - 4.7GB' + (isEmbeddedDownloaded('qwen2.5-7b') ? ' ✅' : '') },
+      { id: 'local/mistral-7b', name: '🔥 Mistral 7B v0.3 (Classic) - 4.1GB' + (isEmbeddedDownloaded('mistral-7b') ? ' ✅' : '') },
+      // Powerful
+      { id: 'local/glm-4-9b', name: '💪 GLM-4 9B (Powerful) - 5.5GB' + (isEmbeddedDownloaded('glm-4-9b') ? ' ✅' : '') },
+      { id: 'local/qwen2.5-14b', name: '💪 Qwen 2.5 14B (Near GPT-4) - 8.9GB' + (isEmbeddedDownloaded('qwen2.5-14b') ? ' ✅' : '') },
+      // Specialist
+      { id: 'local/deepseek-r1-7b', name: '🧠 DeepSeek R1 7B (Reasoning) - 4.7GB' + (isEmbeddedDownloaded('deepseek-r1-7b') ? ' ✅' : '') },
+      { id: 'local/qwen2.5-coder-7b', name: '💻 Qwen 2.5 Coder 7B (Code) - 4.7GB' + (isEmbeddedDownloaded('qwen2.5-coder-7b') ? ' ✅' : '') }
     ],
     ollama: [
       { id: 'ollama/glm4', name: 'GLM-4 9B' + vramTag(4) + (isModelDownloaded('glm4') ? ' ✅' : '') },
@@ -286,21 +295,27 @@ async function startModelPull() {
   isPulling.value = false
 }
 
-async function refreshEmbeddedStatus() {
-  if (provider.value !== 'embedded') return
-  const modelId = selectedModel.value.replace('local/', '') || 'glm-4-9b'
+async function refreshEmbeddedStatus(forceCheck = false) {
+  if (!forceCheck && provider.value !== 'embedded') return
+  const modelId = selectedModel.value.replace('local/', '') || 'qwen2.5-3b'
   embeddedChecked.value = false
-  const status = await api.getLocalAiAllStatus()
-  embeddedEngineInstalled.value = status.engineInstalled
-  localModelsMap.value = status.models || {}
-  embeddedModelInstalled.value = localModelsMap.value[modelId] || false
+  try {
+    const status = await api.getLocalAiAllStatus()
+    embeddedEngineInstalled.value = status.engineInstalled
+    localModelsMap.value = status.models || {}
+    embeddedModelInstalled.value = localModelsMap.value[modelId] || false
+  } catch {
+    // Silent fail — don't block UI
+  }
   embeddedChecked.value = true
 }
 
 async function startEmbeddedPull() {
+  embeddedError.value = ''
+  
   if (!embeddedEngineInstalled.value) {
     isDownloadingEmbedded.value = true
-    embeddedStatus.value = 'Preparing engine download...'
+    embeddedStatus.value = 'Connecting to server...'
     embeddedProgress.value = 0
     
     const unsub = api.onLocalAiDownloadProgress((data: any) => {
@@ -308,10 +323,10 @@ async function startEmbeddedPull() {
       embeddedStatus.value = data.text
     })
 
-    const success = await api.downloadLocalEngine()
+    const result = await api.downloadLocalEngine()
     unsub()
     
-    if (success) {
+    if (result.success) {
        embeddedEngineInstalled.value = true
        if (!embeddedModelInstalled.value) {
          await downloadModelOnly()
@@ -320,8 +335,9 @@ async function startEmbeddedPull() {
          setTimeout(() => { isDownloadingEmbedded.value = false }, 1500)
        }
     } else {
-       embeddedStatus.value = 'Engine download failed!'
-       setTimeout(() => { isDownloadingEmbedded.value = false }, 3000)
+       embeddedError.value = result.error || 'Engine download failed. Please check your internet connection.'
+       embeddedStatus.value = ''
+       isDownloadingEmbedded.value = false
     }
   } else if (!embeddedModelInstalled.value) {
     await downloadModelOnly()
@@ -329,9 +345,10 @@ async function startEmbeddedPull() {
 }
 
 async function downloadModelOnly() {
-  const modelId = selectedModel.value.replace('local/', '') || 'glm-4-9b'
+  const modelId = selectedModel.value.replace('local/', '') || 'qwen2.5-3b'
+  embeddedError.value = ''
   isDownloadingEmbedded.value = true
-  embeddedStatus.value = 'Preparing model download...'
+  embeddedStatus.value = 'Connecting to server...'
   embeddedProgress.value = 0
   
   const unsub = api.onLocalAiDownloadProgress((data: any) => {
@@ -339,16 +356,18 @@ async function downloadModelOnly() {
     embeddedStatus.value = data.text
   })
 
-  const success = await api.downloadLocalModel(modelId)
+  const result = await api.downloadLocalModel(modelId)
   unsub()
   
-  if (success) {
+  if (result.success) {
     embeddedModelInstalled.value = true
-    embeddedStatus.value = 'Ready!'
+    localModelsMap.value[modelId] = true
+    embeddedStatus.value = 'Ready! ✅'
     setTimeout(() => { isDownloadingEmbedded.value = false }, 1500)
   } else {
-    embeddedStatus.value = 'Model download failed!'
-    setTimeout(() => { isDownloadingEmbedded.value = false }, 3000)
+    embeddedError.value = result.error || 'Model download failed. Please check your internet connection.'
+    embeddedStatus.value = ''
+    isDownloadingEmbedded.value = false
   }
 }
 api.onGatewayStatus((status: string) => {
@@ -376,8 +395,8 @@ onMounted(async () => {
       step.value = 'setup'
     }
     
-    // Always check local AI status on mount for accurate UI checkmarks
-    await refreshEmbeddedStatus()
+    // Always check ALL local AI status on mount for accurate UI checkmarks
+    await refreshEmbeddedStatus(true)
 
     if (result.installed) {
       await refreshOllamaStatus()
@@ -598,6 +617,15 @@ async function saveAndStart() {
                 <div class="progress-bar" :style="{ width: embeddedProgress + '%' }"></div>
                 <span class="progress-text">{{ embeddedStatus }} ({{ embeddedProgress }}%)</span>
                 <p v-if="currentQuote" class="status-sub" style="margin-top: 12px; font-style: italic; color: #888; font-size: 12px; text-align: center;">"{{ currentQuote }}"</p>
+              </div>
+
+              <!-- Persistent Error Display -->
+              <div v-if="embeddedError" class="model-pull-section" style="border-color: rgba(232, 107, 107, 0.4); background: rgba(232, 107, 107, 0.08); margin-top: 10px;">
+                <p style="font-size: 13px; color: #e86b6b; font-weight: 600; margin-bottom: 6px;">❌ Download Failed</p>
+                <p style="font-size: 12px; line-height: 1.5; color: #ccc; margin-bottom: 10px;">{{ embeddedError }}</p>
+                <button class="btn btn-secondary" @click="startEmbeddedPull" style="font-size: 12px;">
+                  🔄 Retry Download
+                </button>
               </div>
             </div>
             

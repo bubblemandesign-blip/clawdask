@@ -15,6 +15,7 @@ const clawdeskAPI = {
   // Embedded AI
   getLocalAiStatus: (modelId: string) => ipcRenderer.invoke('get-local-ai-status', modelId),
   getLocalAiAllStatus: () => ipcRenderer.invoke('get-all-local-ai-status'),
+  checkDiskSpace: (requiredBytes: number) => ipcRenderer.invoke('check-disk-space', requiredBytes),
   downloadLocalEngine: () => ipcRenderer.invoke('download-local-engine'),
   downloadLocalModel: (modelId: string) => ipcRenderer.invoke('download-local-model', modelId),
 

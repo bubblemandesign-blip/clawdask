@@ -1159,16 +1159,22 @@ function setupIPC(): void {
     }
   })
 
+  safeHandle('check-disk-space', async (_e, requiredBytes: number) => {
+    return localAIManager.checkDiskSpace(requiredBytes)
+  })
+
   safeHandle('download-local-engine', async (e) => {
-    return await localAIManager.downloadEngine((percent, text) => {
+    const result = await localAIManager.downloadEngine((percent, text) => {
       e.sender.send('local-ai-download-progress', { type: 'engine', percent, text })
     })
+    return result // Now returns { success, error?, errorCode? }
   })
 
   safeHandle('download-local-model', async (e, modelId: string) => {
-    return await localAIManager.downloadModel(modelId, (percent, text) => {
+    const result = await localAIManager.downloadModel(modelId, (percent, text) => {
       e.sender.send('local-ai-download-progress', { type: 'model', modelId, percent, text })
     })
+    return result // Now returns { success, error?, errorCode? }
   })
 
   safeHandle('open-link', async (_e, url: string) => {
