@@ -261,6 +261,17 @@ class GatewayManager {
         }
       }
 
+      // 5. Migrate legacy 'glm4' model name
+      if (config.model === 'ollama/glm4') {
+        config.model = 'ollama/glm4:9b'
+        changed = true
+      }
+      if (config.agents?.defaults?.model?.primary === 'ollama/glm4') {
+        config.agents.defaults.model.primary = 'ollama/glm4:9b'
+        changed = true
+        addLog('[sentinel] Migrated legacy ollama/glm4 to ollama/glm4:9b')
+      }
+
       if (changed) writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
     } catch (e) { console.error('[config:sentinel] Error:', e) }
   }
