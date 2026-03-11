@@ -375,6 +375,10 @@ onMounted(async () => {
     } else {
       step.value = 'setup'
     }
+    
+    // Always check local AI status on mount for accurate UI checkmarks
+    await refreshEmbeddedStatus()
+
     if (result.installed) {
       await refreshOllamaStatus()
     }
