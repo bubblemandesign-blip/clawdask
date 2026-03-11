@@ -15,12 +15,12 @@ function cleanConfig(config: any): any {
     // 2. Clean auth keys (OpenClaw is strict about these)
     if (config.auth) {
         const allowed = [
-            'openai', 'anthropic', 'google', 'groq', 'mistral',
-            'together', 'openrouter', 'deepseek', 'xai', 'ollama', 'edge'
+            'profiles', 'openai', 'anthropic', 'google', 'groq', 'mistral',
+            'together', 'openrouter', 'deepseek', 'xai', 'edge'
         ]
         Object.keys(config.auth).forEach(key => {
-            // Allow detected local models (usually start with ollama or lmstudio)
-            if (!allowed.includes(key) && !key.startsWith('ollama') && !key.startsWith('lmstudio')) {
+            // Allow detected local models (lmstudio)
+            if (!allowed.includes(key) && !key.startsWith('lmstudio')) {
                 console.log(`[bootstrap] Removing invalid auth key: ${key}`)
                 delete config.auth[key]
             }
@@ -39,7 +39,8 @@ export async function bootstrapSkills(): Promise<void> {
     let config: any = {}
     if (existsSync(CONFIG_PATH)) {
         try {
-            config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'))
+            const rawConfig = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
+            config = JSON.parse(rawConfig)
         } catch (err) {
             console.error('[bootstrap] Failed to parse existing config, starting fresh:', err)
             config = {}

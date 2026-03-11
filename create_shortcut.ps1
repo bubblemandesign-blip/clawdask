@@ -1,6 +1,7 @@
 $WshShell = New-Object -ComObject WScript.Shell
 $DesktopPath = [System.Environment]::GetFolderPath('Desktop')
-$ProjectDir = "c:\Users\bubbl\Downloads\clawdesk-20260304T234941Z-3-001\clawdesk"
+$ProjectDir = $PSScriptRoot
+if (-not $ProjectDir) { $ProjectDir = "c:\Users\bubbl\Downloads\clawdesk-20260304T234941Z-3-001\clawdesk" }
 
 # The most stable launch method is now the run_clawdesk.bat
 $TargetPath = Join-Path $ProjectDir "run_clawdesk.bat"
@@ -10,10 +11,12 @@ if (-not (Test-Path $TargetPath)) {
     $TargetPath = Join-Path $ProjectDir "dist\win-unpacked\ClawDesk.exe"
 }
 
-$Shortcut = $WshShell.CreateShortcut(Join-Path $DesktopPath "ClawDesk.lnk")
-$Shortcut.TargetPath = $TargetPath
+$ShortcutPath = Join-Path $DesktopPath "ClawDesk.lnk"
+$Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+$Shortcut.TargetPath = "cmd.exe"
+$Shortcut.Arguments = "/c `"$TargetPath`""
 $Shortcut.WorkingDirectory = $ProjectDir
-$Shortcut.IconLocation = "cmd.exe"
+$Shortcut.IconLocation = "$TargetPath,0" 
 $Shortcut.Save()
 
 Write-Host "ClawDesk (Stability Edition) shortcut created on Desktop!"
