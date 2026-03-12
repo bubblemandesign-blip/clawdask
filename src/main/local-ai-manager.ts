@@ -289,17 +289,29 @@ export class LocalAIManager {
         }
 
         const protocol = currentUrl.startsWith('https') ? https : http
+        
+        // Check if we can resume
+        let startByte = 0
+        if (fs.existsSync(dest)) {
+          startByte = fs.statSync(dest).size
+          console.log(`[LocalAI] Found partial download at ${dest} (${startByte} bytes). Requesting resume...`)
+        }
+
         const options: any = {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': '*/*',
             'Connection': 'keep-alive'
           },
-          timeout: 90000  // 90 seconds to establish connection
+          timeout: 300000  // 300 seconds (5 mins) for initial handshake
+        }
+
+        if (startByte > 0) {
+          options.headers['Range'] = `bytes=${startByte}-`
         }
 
         console.log(`[LocalAI] Download attempt ${attempt + 1}/${maxRetries}: ${currentUrl.substring(0, 80)}...`)
-        onProgress?.(0, 'Connecting to server...')
+        onProgress?.(0, startByte > 0 ? 'Resuming connection...' : 'Connecting to server...')
 
         const req = protocol.get(currentUrl, options, (response) => {
           // ── Handle redirects ──
@@ -312,25 +324,26 @@ export class LocalAIManager {
           }
 
           // ── Handle HTTP errors ──
-          if (response.statusCode === 401 || response.statusCode === 403) {
+          const status = response.statusCode || 0
+          if (status === 401 || status === 403) {
             // Attempt fallback from 'resolve' to 'download' if on huggingface
             if (currentUrl.includes('huggingface.co') && currentUrl.includes('/resolve/')) {
                const fallbackUrl = currentUrl.replace('/resolve/', '/download/')
-               console.log(`[LocalAI] Got ${response.statusCode}, trying fallback: ${fallbackUrl}`)
+               console.log(`[LocalAI] Got ${status}, trying fallback: ${fallbackUrl}`)
                onProgress?.(0, 'Access restricted, trying alternate route...')
                return tryDownload(fallbackUrl, redirectCount + 1)
             }
-            this.lastError = `Access denied (${response.statusCode}). This repository might be private or require a session.`
+            this.lastError = `Access denied (${status}). This repository might be private or require a session.`
             return resolve({ success: false, error: this.lastError, errorCode: 'FORBIDDEN' })
           }
-          if (response.statusCode === 404) {
+          if (status === 404) {
             this.lastError = `File not found (404). The download URL may have changed.`
             return resolve({ success: false, error: this.lastError, errorCode: 'NOT_FOUND' })
           }
-          if (response.statusCode !== 200) {
-            this.lastError = `Server returned status ${response.statusCode}`
+          if (status !== 200 && status !== 206) {
+            this.lastError = `Server returned status ${status}`
             // Retry on 5xx errors
-            if ((response.statusCode || 0) >= 500 && attempt < maxRetries - 1) {
+            if (status >= 500 && attempt < maxRetries - 1) {
               attempt++
               const delay = attempt * 3000
               console.log(`[LocalAI] Server error ${response.statusCode}, retrying in ${delay}ms...`)
@@ -342,13 +355,17 @@ export class LocalAIManager {
           }
 
           // ── Download the file ──
-          const totalBytes = parseInt(response.headers['content-length'] || '0', 10)
-          let downloadedBytes = 0
+          const isPartial = response.statusCode === 206
+          const contentLength = parseInt(response.headers['content-length'] || '0', 10)
+          const totalBytes = isPartial ? (contentLength + startByte) : contentLength
+          
+          let downloadedBytes = startByte
           let lastReportedPercent = -1
           let lastSpeedUpdate = Date.now()
-          let lastSpeedBytes = 0
+          let lastSpeedBytes = startByte
 
-          const file = fs.createWriteStream(dest)
+          // If 206, append. If 200, restart from scratch.
+          const file = fs.createWriteStream(dest, { flags: isPartial ? 'a' : 'w' })
 
           // Socket timeout — if no data arrives for 60 seconds, retry
           response.socket?.setTimeout(60000)
@@ -461,10 +478,10 @@ export class LocalAIManager {
           req.destroy()
           if (attempt < maxRetries - 1) {
             attempt++
-            onProgress?.(0, 'Connection timeout, retrying...')
+            onProgress?.(0, 'Handshake timeout, retrying...')
             setTimeout(() => tryDownload(currentUrl, 0), 3000)
           } else {
-            this.lastError = 'Connection timed out after 90 seconds. Your internet may be blocked or too slow.'
+            this.lastError = 'Server failed to respond after 5 minutes (Handshake Timeout). Your internet may be blocked or too slow.'
             resolve({ success: false, error: this.lastError, errorCode: 'TIMEOUT' })
           }
         })
