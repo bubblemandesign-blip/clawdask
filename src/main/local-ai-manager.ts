@@ -295,7 +295,7 @@ export class LocalAIManager {
             'Accept': '*/*',
             'Connection': 'keep-alive'
           },
-          timeout: 45000  // 45 seconds to establish connection
+          timeout: 90000  // 90 seconds to establish connection
         }
 
         console.log(`[LocalAI] Download attempt ${attempt + 1}/${maxRetries}: ${currentUrl.substring(0, 80)}...`)
@@ -464,7 +464,7 @@ export class LocalAIManager {
             onProgress?.(0, 'Connection timeout, retrying...')
             setTimeout(() => tryDownload(currentUrl, 0), 3000)
           } else {
-            this.lastError = 'Connection timed out after 30 seconds. Your internet may be blocked or too slow.'
+            this.lastError = 'Connection timed out after 90 seconds. Your internet may be blocked or too slow.'
             resolve({ success: false, error: this.lastError, errorCode: 'TIMEOUT' })
           }
         })
@@ -488,13 +488,16 @@ export class LocalAIManager {
       }
     }
 
-    const zipPath = path.join(ENGINE_DIR, 'llama-server.zip')
+    const zipPath = path.join(ENGINE_DIR, 'llama-server.zip.download')
 
     // Try each URL until one works
     for (let i = 0; i < ENGINE_URLS.length; i++) {
       const url = ENGINE_URLS[i]
       console.log(`[LocalAI] Trying engine URL ${i + 1}/${ENGINE_URLS.length}: ${url}`)
       onProgress?.(0, `Downloading Core Engine (source ${i + 1})...`)
+
+      // Proactively stop engine to release any locks
+      this.stopEngine()
 
       const result = await this.downloadFileWithProgress(url, zipPath, (p, text) => {
         onProgress?.(p, `Engine: ${text}`)
@@ -635,14 +638,31 @@ export class LocalAIManager {
     }
 
     const outputFilePath = path.join(MODELS_DIR, preset.filename)
+    const tempPath = `${outputFilePath}.download`
     console.log(`[LocalAI] Downloading model ${preset.name} from: ${preset.url}`)
 
-    const result = await this.downloadFileWithProgress(preset.url, outputFilePath, (p, text) => {
+    // Proactively stop engine to release any locks on model files
+    this.stopEngine()
+
+    const result = await this.downloadFileWithProgress(preset.url, tempPath, (p, text) => {
       onProgress?.(p, `${preset.name}: ${text}`)
     })
 
-    if (!result.success) {
-      try { if (fs.existsSync(outputFilePath)) fs.unlinkSync(outputFilePath) } catch {}
+    if (result.success) {
+      try {
+        // Final move from .download to final .gguf
+        if (fs.existsSync(outputFilePath)) fs.unlinkSync(outputFilePath)
+        fs.renameSync(tempPath, outputFilePath)
+      } catch (e: any) {
+        console.error('[LocalAI] Final rename failed:', e)
+        return { 
+          success: false, 
+          error: `Failed to finalize download: ${e.message}. The file may be locked by another process. Please restart ClawDesk and try again.`, 
+          errorCode: 'UNKNOWN' 
+        }
+      }
+    } else {
+      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath) } catch {}
     }
     return result
   }
