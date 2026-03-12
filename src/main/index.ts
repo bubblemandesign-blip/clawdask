@@ -340,11 +340,11 @@ class GatewayManager {
     this.ensureEnvironment()
     this.preStartConfigCleanup()
     
-    sendGatewayStatus('Ensuring local AI services are running...')
-    await this.ensureLocalEngineRunning()
+    // STARTING LOCAL ENGINE IN BACKGROUND - No longer blocking the gateway boot
+    sendGatewayStatus('Initializing background AI services...')
+    this.ensureLocalEngineRunning().catch(e => addLog(`[gateway:err] Background AI initialization failed: ${e}`))
 
     console.log(`[gateway] Starting: ${bin}`)
-
     sendGatewayStatus('Booting OpenClaw Engine...')
 
     const logPath = join(OPENCLAW_DIR, 'logs', 'gateway_error.log')
@@ -366,7 +366,6 @@ class GatewayManager {
       try {
         const os = require('os')
         const { constants } = os
-        // Set to Above Normal priority
         os.setPriority(this.process.pid, constants.priority.PRIORITY_ABOVE_NORMAL)
         addLog(`[perf] Gateway priority boosted to Above Normal (PID: ${this.process.pid})`)
       } catch (e) { console.error('[perf] Failed to set gateway priority:', e) }
@@ -375,7 +374,6 @@ class GatewayManager {
     this.process.stdout?.on('data', (d: Buffer) => {
       const s = d.toString()
       console.log(`[gateway] ${s.trim()}`)
-      addLog(s)
       if (s.toLowerCase().includes('started') || s.toLowerCase().includes('listening')) {
         sendGatewayStatus('OpenClaw Base initialized...')
       }
@@ -403,18 +401,15 @@ class GatewayManager {
     })
 
     sendGatewayStatus('Waiting for secure port allocation...')
-    const readyPort = await waitForPortRange(18789, 18800, 45000)
+    // Increased timeout for very slow CPU startups
+    const readyPort = await waitForPortRange(18789, 18800, 60000) 
     if (readyPort) {
       GATEWAY_PORT = readyPort
       GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`
       this.state = 'running'
       this.restartCount = 0
       
-      // Zero-Crash Guard: Stability Delay
-      sendGatewayStatus('Port allocated. Securing connection...')
-      addLog(`[gateway] Port ${GATEWAY_PORT} detected. Waiting 1.5s for stability...`)
-      await new Promise(r => setTimeout(r, 1500))
-
+      addLog(`[gateway] Port ${GATEWAY_PORT} detected. Gateway is online.`)
       this.startWatchdog()
       this.startTunnelSync()
       this.updateTray()

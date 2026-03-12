@@ -85,7 +85,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     id: 'glm-4-9b',
     name: 'GLM-4 9B',
     filename: 'glm-4-9b-chat-Q4_K_M.gguf',
-    url: 'https://huggingface.co/lmstudio-community/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q4_K_M.gguf',
     sizeGB: '5.5',
     sizeBytes: 5500000000,
     description: 'Tsinghua\'s powerful model. Strong multilingual support.',
@@ -193,7 +193,7 @@ export class LocalAIManager {
   }
 
   // Wait for server to bind to port and respond
-  private async waitForServerReady(port: number, timeoutMs = 20000): Promise<boolean> {
+  private async waitForServerReady(port: number, timeoutMs = 60000): Promise<boolean> {
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
       try {
@@ -291,9 +291,11 @@ export class LocalAIManager {
         const protocol = currentUrl.startsWith('https') ? https : http
         const options: any = {
           headers: {
-            'User-Agent': 'ClawDesk-AI-Manager/2.0'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Connection': 'keep-alive'
           },
-          timeout: 30000  // 30 seconds to establish connection
+          timeout: 45000  // 45 seconds to establish connection
         }
 
         console.log(`[LocalAI] Download attempt ${attempt + 1}/${maxRetries}: ${currentUrl.substring(0, 80)}...`)
@@ -311,7 +313,14 @@ export class LocalAIManager {
 
           // ── Handle HTTP errors ──
           if (response.statusCode === 401 || response.statusCode === 403) {
-            this.lastError = `Access denied (${response.statusCode}). This model may require license acceptance.`
+            // Attempt fallback from 'resolve' to 'download' if on huggingface
+            if (currentUrl.includes('huggingface.co') && currentUrl.includes('/resolve/')) {
+               const fallbackUrl = currentUrl.replace('/resolve/', '/download/')
+               console.log(`[LocalAI] Got ${response.statusCode}, trying fallback: ${fallbackUrl}`)
+               onProgress?.(0, 'Access restricted, trying alternate route...')
+               return tryDownload(fallbackUrl, redirectCount + 1)
+            }
+            this.lastError = `Access denied (${response.statusCode}). This repository might be private or require a session.`
             return resolve({ success: false, error: this.lastError, errorCode: 'FORBIDDEN' })
           }
           if (response.statusCode === 404) {
