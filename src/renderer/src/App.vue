@@ -17,14 +17,7 @@ const customBaseUrl = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
 const systemSpecs = ref({ totalMem: 0, vram: 0 })
-const modelInstalled = ref(true)  // Default true so user is never stuck
-const ollamaInstalled = ref(true)
-const ollamaRunning = ref(false)
-const ollamaChecked = ref(false)
-const installedModels = ref<string[]>([])
-const pullProgress = ref(0)
-const pullStatus = ref('')
-const isPulling = ref(false)
+// Removed old unused ollama/pull state variables to pass type check
 const startupStatus = ref('Applying your premium configuration...')
 
 // Embedded AI State
@@ -58,7 +51,7 @@ function stopQuotes() {
   if (quoteInterval) clearInterval(quoteInterval)
 }
 
-watch(() => isPulling.value, (v) => v ? startQuotes() : stopQuotes())
+// Removed watch for isPulling
 watch(() => step.value, (v) => v === 'starting' ? startQuotes() : stopQuotes())
 
 // Capabilities state
@@ -102,22 +95,6 @@ const providers = [
 const selectedProvider = computed(() => providers.find(p => p.id === provider.value))
 const isCustom = computed(() => provider.value === 'custom')
 const isLocal = computed(() => selectedProvider.value?.isLocal || false)
-
-function vramTag(needed: number): string {
-  const vramGB = Math.round(systemSpecs.value.vram / (1024 * 1024 * 1024))
-  if (vramGB <= 0) return needed <= 4 ? ' - Lightweight' : ` - Needs ${needed}GB+ VRAM`
-  if (vramGB >= needed) return ` - ✨ Great for your ${vramGB}GB VRAM`
-  if (vramGB >= needed - 2) return ` - ⚡ OK on your ${vramGB}GB`
-  return ` - ⚠️ Needs ${needed}GB+ VRAM`
-}
-
-function isModelDownloaded(ollamaName: string): boolean {
-  return installedModels.value.some(m => {
-    const n = m.toLowerCase()
-    const s = ollamaName.toLowerCase()
-    return n === s || n === s + ':latest' || n.startsWith(s + ':')
-  })
-}
 
 const localModelsMap = ref<Record<string, boolean>>({})
 
@@ -243,65 +220,6 @@ async function detectBackend() {
   backendChecked.value = true
 }
 
-async function refreshOllamaStatus() {
-  try {
-    const result = await api.listModels()
-    if (result.ollamaInstalled !== undefined) {
-      ollamaInstalled.value = result.ollamaInstalled
-    }
-    ollamaRunning.value = result.ollamaRunning
-    ollamaChecked.value = true
-    if (result.ollamaRunning) {
-      installedModels.value = result.models || []
-    }
-    await checkModelStatus()
-  } catch {
-    ollamaRunning.value = false
-    ollamaChecked.value = true
-    modelInstalled.value = true // Don't block user
-  }
-}
-
-async function checkModelStatus() {
-  if (provider.value !== 'ollama') return
-  const modelName = selectedModel.value.split('/')[1] || 'glm4'
-  const result = await api.checkModel(modelName)
-  ollamaInstalled.value = result.ollamaInstalled ?? true
-  ollamaRunning.value = result.ollamaRunning
-  if (result.ollamaRunning) {
-    modelInstalled.value = result.exists
-  } else {
-    modelInstalled.value = true  // Don't block if we can't be sure
-  }
-}
-
-async function startModelPull() {
-  const modelName = selectedModel.value.split('/')[1] || 'glm4'
-  isPulling.value = true
-  pullProgress.value = 0
-  pullStatus.value = 'Initializing...'
-  
-  api.onPullProgress((data: any) => {
-    if (data.status) pullStatus.value = data.status
-    if (data.completed && data.total) {
-      pullProgress.value = Math.round((data.completed / data.total) * 100)
-    }
-  })
-
-  const result = await api.pullModel(modelName)
-  if (result.success) {
-    modelInstalled.value = true
-    pullStatus.value = 'Download complete!'
-    await refreshOllamaStatus()
-  } else {
-    if (result.error && result.error.includes('no space left on device')) {
-      errorMessage.value = 'Error: Not enough storage space available on your drive.'
-    } else {
-      errorMessage.value = 'Pull failed: ' + result.error
-    }
-  }
-  isPulling.value = false
-}
 
 async function refreshEmbeddedStatus(forceCheck = false) {
   if (!forceCheck && provider.value !== 'local' && provider.value !== 'embedded') return
@@ -424,9 +342,7 @@ onMounted(async () => {
     // Always check ALL local AI status on mount for accurate UI checkmarks
     await refreshEmbeddedStatus(true)
 
-    if (result.installed) {
-      await refreshOllamaStatus()
-    }
+    // Removed unused call to refreshOllamaStatus
   } catch {
     step.value = 'setup'
   }
