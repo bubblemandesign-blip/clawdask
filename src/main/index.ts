@@ -6,21 +6,57 @@ try {
 // Force Ollama Authentication for local bypass (OpenClaw requirement)
 process.env['OLLAMA_API_KEY'] = 'ollama-local'
 
+// Core imports
+import { app, BrowserWindow, globalShortcut } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { join, dirname } from 'path'
 import { ChildProcess, spawn, execSync } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync, readFileSync, renameSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, renameSync } from 'fs'
 import { homedir } from 'os'
 import http from 'http'
 import https from 'https'
-import { bootstrapSkills } from './skills-bootstrapper'
-import { localAIManager } from './local-ai-manager'
 
-// ─── Constants ───────────────────────────────────────────────────────────
+const OPENCLAW_DIR = join(homedir(), '.openclaw')
+const LOGS_DIR = join(OPENCLAW_DIR, 'logs')
+const CRASH_LOG = join(LOGS_DIR, 'app_crash.log')
+const TRACE_LOG = join(LOGS_DIR, 'app_trace.log')
+
+// Global Logs/Crash Sentinel
+if (!existsSync(LOGS_DIR)) mkdirSync(LOGS_DIR, { recursive: true })
+
+function addTrace(msg: string) {
+  const line = `[${new Date().toISOString()}] [TRACE] ${msg}\n`
+  try { appendFileSync(TRACE_LOG, line) } catch {}
+}
+
+function logCrash(err: any) {
+  const msg = `\n[${new Date().toISOString()}] CRITICAL CRASH: ${err?.stack || err}\n`
+  addTrace(`CRASH DETECTED: ${err?.message || err}`)
+  try { appendFileSync(CRASH_LOG, msg) } catch {}
+}
+process.on('uncaughtException', logCrash)
+process.on('unhandledRejection', logCrash)
+
+addTrace('--- APP START (BOOTSTRAP) ---')
+
+import { bootstrapSkills } from './skills-bootstrapper'
+import { localAIManager, AVAILABLE_MODELS } from './local-ai-manager'
+// Dev-mode userData path fix (deferred until app is definitively available)
+function setupDevPath() {
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      const devDataPath = join(homedir(), '.openclaw', 'dev-data')
+      if (!existsSync(devDataPath)) mkdirSync(devDataPath, { recursive: true })
+      if (app) app.setPath('userData', devDataPath)
+    }
+  } catch (e) {
+    console.warn('[boot] Early userData set failed:', e)
+  }
+}
+
 const APP_ID = 'com.clawdesk.app'
 let GATEWAY_PORT = 18789
 let GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`
-const OPENCLAW_DIR = join(homedir(), '.openclaw')
 const CONFIG_PATH = join(OPENCLAW_DIR, 'openclaw.json')
 
 // ─── Enterprise Logs ─────────────────────────────────────────────────────
@@ -28,7 +64,9 @@ const MAX_LOGS = 1000
 let LOG_BUFFER: string[] = []
 
 function addLog(line: string) {
-  LOG_BUFFER.push(`[${new Date().toLocaleTimeString()}] ${line.trim()}`)
+  const formatted = `[${new Date().toLocaleTimeString()}] ${line.trim()}`
+  console.log(`[main] ${formatted}`) // Ensure visibility in terminal
+  LOG_BUFFER.push(formatted)
   if (LOG_BUFFER.length > MAX_LOGS) LOG_BUFFER.shift()
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('log-update', LOG_BUFFER[LOG_BUFFER.length - 1])
@@ -41,7 +79,6 @@ let onboardingWindow: any = null
 let splashWindow: any = null
 let tray: any = null
 let isQuitting = false
-let retryCount = 0
 const isMinimized = process.argv.includes('--minimized')
 
 function sendGatewayStatus(msg: string) {
@@ -83,8 +120,19 @@ class RuntimeManager {
     }
   }
 
-  getNodePath(): string {
-    return existsSync(this.nodePath) ? this.nodePath : process.execPath
+  async getNodePath(): Promise<string> {
+    if (existsSync(this.nodePath)) return this.nodePath
+    
+    // Check if system node is compatible
+    try {
+      const { execSync } = require('child_process')
+      const sysVersion = execSync('node -v', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] })
+      if (sysVersion.includes('v22') || sysVersion.includes('v23') || sysVersion.includes('v24')) {
+        return 'node'
+      }
+    } catch {}
+
+    return process.execPath
   }
 
   private isRuntimeValid(): boolean {
@@ -129,7 +177,7 @@ class GatewayManager {
   private lastCrashTime = 0
   private crashFrequency = 0
   private watchdogInterval: NodeJS.Timeout | null = null
-  private runtime: RuntimeManager
+  public runtime: RuntimeManager
 
   constructor() {
     this.runtime = new RuntimeManager()
@@ -201,15 +249,16 @@ class GatewayManager {
       let config = JSON.parse(rawConfig)
       let changed = false
 
-      // 1. Ensure Top-Level Structure
-      const defaults = { auth: {}, agents: { defaults: { sandbox: { mode: 'off' } } }, skills: { entries: {} } }
-      Object.keys(defaults).forEach(key => {
-        if (!config[key]) {
-          config[key] = defaults[key]
-          changed = true
-          addLog(`[sentinel] Injected missing config key: ${key}`)
-        }
-      })
+      // 1. Ensure Top-Level and Defaults Structure
+      if (!config.auth) { config.auth = {}; changed = true; }
+      if (!config.skills) { config.skills = { entries: {} }; changed = true; }
+      if (!config.agents) { config.agents = {}; changed = true; }
+      if (!config.agents.defaults) { config.agents.defaults = {}; changed = true; }
+      
+      if (!config.agents.defaults.sandbox) {
+        config.agents.defaults.sandbox = { mode: 'off' }
+        changed = true
+      }
 
       // 2. Docker Probe for Sandbox Safety
       let hasDocker = false
@@ -225,23 +274,37 @@ class GatewayManager {
       }
 
       // 3. Embedded AI Provider Registration
-      // OpenClaw needs models.providers.custom.apiKey to register our internal server.
       const primaryModel = config?.agents?.defaults?.model?.primary || config?.model || ''
       if (primaryModel.startsWith('local/')) {
         if (!config.models) config.models = {}
         if (!config.models.providers) config.models.providers = {}
-        if (!config.models.providers.custom || !config.models.providers.custom.apiKey) {
-          config.models = config.models || {}
-          config.models.providers = config.models.providers || {}
-          config.models.providers.custom = {
-            ...(config.models.providers.custom || {}),
+        // Use 'local' provider for embedded models (matches the 'local/' prefix)
+        if (!config.models.providers.local || !config.models.providers.local.apiKey) {
+          config.models.providers.local = {
+            ...(config.models.providers.local || {}),
             apiKey: 'local-embedded',
-            api: 'openai', // llama-server provides OpenAI-compatible endpoints
-            baseUrl: 'http://127.0.0.1:8080/v1',
-            models: []
+            api: 'openai-responses',
+            baseUrl: 'http://127.0.0.1:11434/v1',
+            models: AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name }))
           }
           changed = true
-          addLog('[sentinel] Injected Embedded provider registration (apiKey: local-embedded)')
+          addLog('[sentinel] Injected Local provider registration')
+        }
+        // Cleanup: remove obsolete names if they were used for local engine
+        if (config.models.providers.openai && config.models.providers.openai.apiKey === 'local-embedded') {
+          delete config.models.providers.openai
+          changed = true
+        }
+        if (config.models.providers.custom && config.models.providers.custom.apiKey === 'local-embedded') {
+          delete config.models.providers.custom
+          changed = true
+        }
+        // Ensure auth profile exists but is CLEAN
+        if (!config.auth) config.auth = {}
+        if (!config.auth.profiles) config.auth.profiles = {}
+        if (!config.auth.profiles['local:default']) {
+          config.auth.profiles['local:default'] = { mode: 'api_key', provider: 'local' }
+          changed = true
         }
       }
 
@@ -273,31 +336,71 @@ class GatewayManager {
       
       const primaryModel = config?.agents?.defaults?.model?.primary || config?.model || ''
       
-      // We only care about internal models prefixed with 'local/'
-      if (!primaryModel.startsWith('local/')) return
-      
-      const targetModelId = primaryModel.replace('local/', '')
-      const { localAIManager } = require('./local-ai-manager')
-      
-      // 1. Is the engine or model entirely missing?
-      if (!localAIManager.isEngineInstalled() || !localAIManager.isModelInstalled(targetModelId)) {
-        addLog(`[gateway:err] Local AI requires components (Engine/Model: ${targetModelId}). Please download via UI.`)
-        // The UI handles the blocking UX
+      // ─── OLLAMA NATIVE SUPPORT ───
+      if (primaryModel.startsWith('ollama/')) {
+        addLog('[gateway] Detected Ollama model. Ensuring service is active...')
+        sendGatewayStatus('Verifying Ollama service...')
+        const ollamaOk = await localAIManager.ensureOllamaRunning()
+        if (ollamaOk) {
+          addLog('[gateway] Ollama service is active and responsive.')
+        } else {
+          addLog('[gateway:err] Ollama service could not be started automatically.')
+        }
         return
       }
 
-      // 2. Start the embedded server
-      sendGatewayStatus('Warming up embedded AI engine...')
-      const success = await localAIManager.startEngine(targetModelId, 8080)
+      // ─── UNIFIED LOCAL ENGINE SUPPORT ───
+      if (!primaryModel.startsWith('local/')) return
       
-      if (success) {
-        addLog('[gateway] Embedded AI engine successfully started on port 8080')
+      const targetModelId = primaryModel.replace('local/', '')
+      
+      // 1. Verify model integrity if already downloaded
+      if (localAIManager.isModelInstalled(targetModelId)) {
+        const integrity = localAIManager.verifyModelIntegrity(targetModelId)
+        if (!integrity.ok) {
+          addLog(`[gateway:warn] Model integrity check failed: ${integrity.message}. Re-downloading...`)
+          sendGatewayStatus(`Re-downloading corrupted AI Model (${targetModelId})...`)
+          const modelDownloaded = await localAIManager.downloadModel(targetModelId, undefined, true)
+          if (!modelDownloaded.success) {
+            addLog(`[gateway:err] Failed to re-download model: ${modelDownloaded.error}`)
+            return
+          }
+        }
+      }
+      
+      // 2. Check for missing model
+      if (!localAIManager.isModelInstalled(targetModelId)) {
+        addLog(`[gateway:err] Model ${targetModelId} is missing. Attempting proactive download...`)
+        sendGatewayStatus(`Downloading AI Model (${targetModelId})...`)
+        const modelDownloaded = await localAIManager.downloadModel(targetModelId)
+        if (!modelDownloaded.success) {
+          addLog(`[gateway:err] Failed to proactively download model: ${modelDownloaded.error}`)
+          return
+        }
+      }
+
+      // 3. Start the engine (Ollama-first, embedded fallback)
+      sendGatewayStatus('Warming up local AI engine...')
+      const result = await localAIManager.startEngine(targetModelId)
+      
+      if (result.success) {
+        addLog(`[gateway] Local AI engine (${result.backend}) active on port ${result.port}`)
+        
+        // Update config baseUrl to match the active port
+        try {
+          const cfg = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, ''))
+          if (cfg.models?.providers?.local) {
+            cfg.models.providers.local.baseUrl = `http://127.0.0.1:${result.port}/v1`
+            writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2))
+            addLog(`[gateway] Updated config baseUrl to port ${result.port}`)
+          }
+        } catch {}
       } else {
-        addLog('[gateway:err] Embedded AI engine failed to start.')
+        addLog('[gateway:err] Local AI engine failed to start: ' + localAIManager.getLastError())
       }
       
     } catch (e) {
-      addLog('[gateway:err] Failed to verify/start embedded AI: ' + e)
+      addLog('[gateway:err] Failed to verify/start local AI: ' + e)
     }
   }
 
@@ -317,11 +420,14 @@ class GatewayManager {
   async start(): Promise<boolean> {
     if (this.state === 'running' || this.state === 'starting') return true
 
+    addTrace('gateway.start() - cleaning up zombies...')
     sendGatewayStatus('Cleaning up old processes...')
     await this.cleanupZombies()
 
+    addTrace('gateway.start() - ensuring runtime...')
     sendGatewayStatus('Verifying Javascript runtime...')
     const nodeExec = await this.runtime.ensureRuntime()
+    addTrace(`Runtime: ${nodeExec}`)
     const bin = this.findBin()
     if (!bin) {
       console.error('[gateway] Binary not found')
@@ -401,8 +507,35 @@ class GatewayManager {
     })
 
     sendGatewayStatus('Waiting for secure port allocation...')
-    // Increased timeout for very slow CPU startups
-    const readyPort = await waitForPortRange(18789, 18800, 60000) 
+    sendGatewayStatus('Waiting for secure port allocation...')
+    
+    // ── RESILIENT PORT ALLOCATION ──
+    let readyPort: number | null = null
+    let attempts = 0
+    // Increased patience for the first boot, especially if AI is downloading
+    // 300 attempts * 5s = 25 minutes. If it takes longer, the user can just wait.
+    const maxAttempts = 300 
+    
+    while (attempts < maxAttempts) {
+      readyPort = await waitForPortRange(GATEWAY_PORT, GATEWAY_PORT + 10, 5000)
+      if (readyPort) break
+      
+      attempts++
+      const onboarding = localAIManager.getOnboardingState()
+      addTrace(`Gateway port probe ${attempts}/${maxAttempts}. Status: ${onboarding.status}`)
+      
+      // If AI is actually doing something (downloading/starting), be verbose
+      if (onboarding.progress > 0 || onboarding.status !== 'Initializing...') {
+         const progressText = onboarding.progress > 0 ? ` (${Math.round(onboarding.progress)}%)` : ''
+         sendGatewayStatus(`${onboarding.status}${progressText}`)
+      } else {
+         sendGatewayStatus(`Waking up AI engine...`)
+      }
+      
+      // Wait before next check
+      await new Promise(r => setTimeout(r, 5000))
+    }
+
     if (readyPort) {
       GATEWAY_PORT = readyPort
       GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`
@@ -445,10 +578,14 @@ class GatewayManager {
     try {
       addLog('[proc] Cleaning up potential ghost processes...')
 
-      // 1. Kill any existing cloudflared or hanging openclaw/clawdesk processes
-      const targets = ['cloudflared.exe', 'openclaw.exe', 'ClawDesk.exe']
+      // 1. Kill any existing cloudflared or hanging openclaw processes
+      // WARNING: Do NOT kill ClawDesk.exe as it represents the current process in production!
+      const targets = ['cloudflared.exe', 'openclaw.exe']
       targets.forEach(img => {
-        try { execSync(`taskkill /F /IM ${img} /T`, { stdio: 'ignore', windowsHide: true }) } catch { }
+        try {
+          addTrace(`Cleanup: killing ${img}...`)
+          execSync(`taskkill /F /IM ${img} /T`, { stdio: 'ignore', windowsHide: true })
+        } catch { }
       })
 
       // 2. Identify if anything is on our port
@@ -467,6 +604,7 @@ class GatewayManager {
         }
       } catch (e) { /* Likely no process found */ }
 
+      addTrace('[proc] Port reclamation complete')
       addLog('[proc] Zero-Crash Guard: Environment sanitized')
     } catch (e) {
       addLog(`[proc] Cleanup warning: ${e}`)
@@ -549,17 +687,22 @@ class GatewayManager {
   findBin(): string | null {
     const { app } = require('electron')
     const possiblePaths = [
-      join(app.getAppPath(), 'node_modules', 'openclaw', 'openclaw.mjs'),
-      join(process.resourcesPath, 'app', 'node_modules', 'openclaw', 'openclaw.mjs'),
+      // Standard unpacked locations
       join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'openclaw', 'openclaw.mjs'),
-      join(process.resourcesPath, 'app.asar', 'node_modules', 'openclaw', 'openclaw.mjs'),
       join(dirname(process.execPath), 'resources', 'app.asar.unpacked', 'node_modules', 'openclaw', 'openclaw.mjs'),
-      join(dirname(app.getAppPath()), 'node_modules', 'openclaw', 'openclaw.mjs'),
+      // Fallbacks
+      join(app.getAppPath(), 'node_modules', 'openclaw', 'openclaw.mjs').replace('app.asar', 'app.asar.unpacked'),
       join(homedir(), '.openclaw', 'bin', 'openclaw.mjs')
     ]
     for (const p of possiblePaths) {
-      try { if (existsSync(p)) return p } catch { }
+      try { 
+        if (existsSync(p)) {
+          addTrace(`Gateway binary found at: ${p}`)
+          return p 
+        }
+      } catch { }
     }
+    addTrace('FATAL: Gateway binary (openclaw.mjs) not found in any standard location.')
     return null
   }
 }
@@ -591,7 +734,12 @@ function hasValidConfig(): boolean {
   try {
     const rawConfig = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
     const config = JSON.parse(rawConfig)
-    return !!(config?.auth || config?.providers || config?.openai || config?.anthropic || config?.models?.providers?.ollama || config?.provider === 'ollama' || config?.model?.startsWith('ollama/'))
+    const hasProfiles = config?.auth?.profiles && Object.keys(config.auth.profiles).length > 0
+    const hasModels = config?.models?.providers && Object.keys(config.models.providers).length > 0
+    const hasLegacy = config?.openai || config?.anthropic
+    const hasDirect = config?.provider === 'ollama' || config?.provider === 'embedded' || config?.model?.startsWith('ollama/') || config?.model?.startsWith('local/')
+    
+    return !!(hasProfiles || hasModels || hasLegacy || hasDirect)
   } catch {
     try {
       const backup = CONFIG_PATH + '.bak.' + Date.now()
@@ -650,18 +798,72 @@ function setAutoStart(enabled: boolean): void {
 
 // ─── Onboarding ─────────────────────────────────────────────────────────
 function createOnboardingWindow(): void {
-  const electron = require('electron')
-  if (!electron) return
-  const { BrowserWindow } = electron
-  onboardingWindow = new BrowserWindow({
-    width: 520, height: 620, frame: false, resizable: false, transparent: true,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
-  })
-  if (getIsDev() && process.env['ELECTRON_RENDERER_URL']) {
-    onboardingWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    onboardingWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  try {
+    addTrace('createOnboardingWindow() entry')
+    const electron = require('electron')
+    if (!electron) { addTrace('createOnboardingWindow: electron module is missing'); return }
+    const { BrowserWindow } = electron
+    
+    addTrace('Initializing BrowserWindow for onboarding...')
+    onboardingWindow = new BrowserWindow({
+      width: 520, height: 620, frame: false, resizable: false, transparent: true,
+      webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+    })
+    addTrace('BrowserWindow created.')
+
+    if (getIsDev() && process.env['ELECTRON_RENDERER_URL']) {
+      addTrace(`Loading URL: ${process.env['ELECTRON_RENDERER_URL']}`)
+      onboardingWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    } else {
+      const url = join(__dirname, '../renderer/index.html')
+      addTrace(`Loading File: ${url}`)
+      onboardingWindow.loadFile(url)
+    }
+  } catch (e) {
+    addTrace(`FATAL in createOnboardingWindow: ${e}`)
+    logCrash(e)
   }
+
+  // ─── PREMIUM ONBOARDING INJECTION ───
+  onboardingWindow.webContents.on('did-finish-load', () => {
+    const tips = localAIManager.getOnboardingState().tips
+    const injection = `
+      (function() {
+        const TIPS = ${JSON.stringify(tips)};
+        let tipIdx = 0;
+        
+        // Find elements (based on screenshot architecture)
+        const statusEl = document.querySelector('.status-text') || document.querySelector('p');
+        const quoteEl = document.querySelector('.quote') || document.querySelector('i') || document.querySelector('.footer-text');
+        
+        function rotateTip() {
+          if (!quoteEl) return;
+          quoteEl.style.opacity = '0';
+          setTimeout(() => {
+            quoteEl.textContent = '"' + TIPS[tipIdx] + '"';
+            quoteEl.style.opacity = '1';
+            tipIdx = (tipIdx + 1) % TIPS.length;
+          }, 500);
+        }
+        
+        if (quoteEl) {
+           quoteEl.style.transition = 'opacity 0.5s ease';
+           rotateTip();
+           setInterval(rotateTip, 8000);
+        }
+
+        // Bridge status updates to the UI more prominently
+        window.addEventListener('message', (event) => {
+          if (event.data?.type === 'gateway-status-update') {
+            const msg = event.data.msg;
+            if (statusEl) statusEl.textContent = msg;
+          }
+        });
+      })();
+    `
+    onboardingWindow.webContents.executeJavaScript(injection)
+  })
+
   onboardingWindow.on('closed', () => { onboardingWindow = null })
 }
 
@@ -1010,27 +1212,54 @@ function setupIPC(): void {
     ipcMain.handle(channel, listener)
   }
 
-  safeHandle('check-openclaw', async () => ({ installed: !!gateway.findBin(), path: gateway.findBin(), isGatewayStarting: gateway.currentState === 'starting' || gateway.currentState === 'running' }))
+  safeHandle('check-openclaw', async () => ({ 
+    installed: !!gateway.findBin(), 
+    path: gateway.findBin(), 
+    isGatewayStarting: gateway.currentState === 'starting' || gateway.currentState === 'running',
+    hasValidConfig: hasValidConfig()
+  }))
+  safeHandle('get-onboarding-state', async () => localAIManager.getOnboardingState())
+  safeHandle('retry-engine-setup', async () => {
+    gateway.ensureLocalEngineRunning().catch(e => addLog(`[gateway:err] Manual AI retry failed: ${e}`))
+    return true
+  })
   safeHandle('save-config', async (_e, c: any) => {
     try {
       if (!existsSync(OPENCLAW_DIR)) mkdirSync(OPENCLAW_DIR, { recursive: true })
       let ex: any = {}; try { ex = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) } catch { }
 
-      const providerKey = (c.provider === 'custom' || c.provider === 'moonshot' || c.provider === 'embedded') ? 'openai' : c.provider
+      const providerKey = (c.provider === 'embedded' || c.provider === 'local') ? 'local' : ((c.provider === 'custom' || c.provider === 'moonshot') ? 'openai' : c.provider)
       const profileId = `${providerKey}:default`
+      
+      // Official Schema: Profile only has mode and provider
       const authProfile: any = { mode: 'api_key', provider: providerKey }
-      if (c.baseUrl) authProfile.baseUrl = c.baseUrl
-      else if (c.provider === 'moonshot') authProfile.baseUrl = 'https://api.moonshot.cn/v1'
-      else if (c.provider === 'embedded') authProfile.baseUrl = 'http://127.0.0.1:8080/v1'
+      
+      // Protocol details go into models.providers
+      const providerConfig: any = { 
+        apiKey: c.apiKey || 'local-embedded',
+        api: 'openai-responses',
+        baseUrl: c.baseUrl || 'https://api.openai.com/v1',
+        context_window: 128000,
+        models: (c.provider === 'embedded') ? AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name })) : []
+      }
 
-      // OpenClaw requires OLLAMA_API_KEY to be set, even though it's local.
+      if (c.baseUrl) {
+        providerConfig.baseUrl = c.baseUrl
+      }
+
+      if (c.provider === 'moonshot') {
+        providerConfig.baseUrl = 'https://api.moonshot.cn/v1'
+      }
+
       if (providerKey === 'ollama') {
-        authProfile.apiKey = 'ollama-local'
-      } else if (c.provider === 'embedded') {
-        authProfile.apiKey = 'local-embedded'
+        providerConfig.apiKey = 'ollama-local'
+        providerConfig.baseUrl = c.baseUrl || 'http://127.0.0.1:11434'
+      } else if (c.provider === 'embedded' || c.provider === 'local') {
+        providerConfig.apiKey = 'local-embedded'
+        // Port will be dynamically updated by ensureLocalEngineRunning based on detected backend
+        providerConfig.baseUrl = c.baseUrl || 'http://127.0.0.1:8847/v1'
       } else {
-         // Keep existing apiKey logic for others
-         authProfile.apiKey = c.apiKey
+         providerConfig.apiKey = c.apiKey
       }
 
       const final = {
@@ -1040,6 +1269,13 @@ function setupIPC(): void {
           profiles: {
             ...ex.auth?.profiles,
             [profileId]: authProfile
+          }
+        },
+        models: {
+          ...ex.models,
+          providers: {
+            ...ex.models?.providers,
+            [providerKey]: providerConfig
           }
         },
         tools: {
@@ -1065,7 +1301,8 @@ function setupIPC(): void {
           whatsapp: {
             enabled: true,
             dmPolicy: c.dmPolicy || 'pairing',
-            allowFrom: (c.dmPolicy === 'open') ? ['*'] : ((c.dmPolicy === 'allowlist' && c.allowFrom) ? c.allowFrom.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined)
+            allowFrom: (c.dmPolicy === 'open') ? ['*'] : ((c.dmPolicy === 'allowlist' && c.allowFrom) ? c.allowFrom.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined),
+            groupPolicy: 'open'
           }
         },
         messages: {
@@ -1154,6 +1391,14 @@ function setupIPC(): void {
     }
   })
 
+  safeHandle('detect-local-backend', async () => {
+    return await localAIManager.detectBestBackend()
+  })
+
+  safeHandle('verify-model-integrity', async (_e, modelId: string) => {
+    return localAIManager.verifyModelIntegrity(modelId)
+  })
+
   safeHandle('check-disk-space', async (_e, requiredBytes: number) => {
     return localAIManager.checkDiskSpace(requiredBytes)
   })
@@ -1165,10 +1410,10 @@ function setupIPC(): void {
     return result // Now returns { success, error?, errorCode? }
   })
 
-  safeHandle('download-local-model', async (e, modelId: string) => {
+  safeHandle('download-local-model', async (e, modelId: string, force = false) => {
     const result = await localAIManager.downloadModel(modelId, (percent, text) => {
       e.sender.send('local-ai-download-progress', { type: 'model', modelId, percent, text })
-    })
+    }, force)
     return result // Now returns { success, error?, errorCode? }
   })
 
@@ -1329,7 +1574,7 @@ function setupIPC(): void {
       addLog('[start] Gateway failed to start, running diagnostics...')
       let diagnosticInfo = ''
       try {
-        const doctorResult = execSync(`"${process.execPath}" "${bin}" doctor`, {
+        const doctorResult = execSync(`"${await gateway.runtime.getNodePath()}" "${bin}" doctor`, {
           env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
           encoding: 'utf-8',
           windowsHide: true
@@ -1353,11 +1598,12 @@ function setupIPC(): void {
   safeHandle('get-logs', () => LOG_BUFFER)
 
   // ─── CLI Runner Helper ───────────────────────────────────────────
-  function runCLI(args: string[]): Promise<{ success: boolean; output: string }> {
+  async function runCLI(args: string[]): Promise<{ success: boolean; output: string }> {
     const bin = gateway.findBin()
     if (!bin) return Promise.resolve({ success: false, output: 'Binary not found' })
-    return new Promise((resolve) => {
-      const p = spawn(process.execPath, [bin, ...args], {
+    return new Promise(async (resolve) => {
+      const node = await gateway.runtime.getNodePath()
+      const p = spawn(node, [bin, ...args], {
         env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
       })
       let out = ''
@@ -1465,43 +1711,34 @@ function generateToken(): string {
 }
 
 // ─── App Lifecycle ──────────────────────────────────────────────────────
-// ─── Environment Helpers ──────────────────────────────────────────────
-function getElectron(): any {
-  const e = require('electron')
-  if (e && typeof e !== 'string') return e
-  return null
-}
-
-
-// ─── App Lifecycle ──────────────────────────────────────────────────────
 const startApp = () => {
-  const electron = getElectron()
-  if (!electron || !electron.app) {
-    if (retryCount < 10) {
-      retryCount++
-      console.log(`[boot] Electron API shadowing detected (Attempt ${retryCount}). Cleaning environment and retrying...`)
-      try {
-        delete process.env['ELECTRON_RUN_AS_NODE']
-        delete require.cache[require.resolve('electron')]
-      } catch {}
-      setTimeout(startApp, 200)
-    } else {
-      console.error('[boot] Fatal: Electron API could not be resolved. Please ensure you are running via the Electron binary.')
+  try {
+    addTrace('startApp() entry')
+    // Ensure we are running in an Electron environment
+    if (!app) {
+      addTrace('FATAL: app module is undefined')
+      logCrash('Electron app module not found in startApp')
+      return
     }
-    return
+
+    addTrace('Requesting single instance lock...')
+    // Handle single instance lock
+    const gotTheLock = app.requestSingleInstanceLock()
+    if (!gotTheLock) {
+      addTrace('Lock denied - Another instance found. Quitting.')
+      app.quit()
+      return
+    }
+    addTrace('Lock acquired.')
+
+    setupDevPath()
+  } catch (e) {
+    addTrace(`Error in startApp entry: ${e}`)
+    logCrash(e)
   }
 
-  const { app: electronApp, globalShortcut, BrowserWindow } = electron
-
-  let hasLock = false
-  try { hasLock = electronApp.requestSingleInstanceLock() } catch { hasLock = true }
-
-  if (!hasLock) {
-    electronApp.quit()
-    return
-  }
-
-  electronApp.on('second-instance', () => {
+  app.on('second-instance', () => {
+    addTrace('Second instance detected - focusing existing window')
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.show(); mainWindow.focus()
@@ -1514,27 +1751,46 @@ const startApp = () => {
     }
   })
 
-  electronApp.whenReady().then(async () => {
-    try { electronApp.setAppUserModelId(APP_ID) } catch { }
-    setupIPC(); createTray(); await bootstrapSkills()
+  addTrace('Setting up app.whenReady() sequence...')
+  app.whenReady().then(async () => {
+    addTrace('app.ready event received.')
+    try { 
+      app.setAppUserModelId(APP_ID)
+      addTrace(`AppUserModelId set to ${APP_ID}`)
+    } catch (e) { addTrace(`Warning: Failed to set AppUserModelId: ${e}`) }
+
+    addTrace('Running setupIPC...')
+    setupIPC()
+    addTrace('Running createTray...')
+    createTray()
+    addTrace('Running bootstrapSkills...')
+    await bootstrapSkills()
+    addTrace('Skills bootstrapped.')
 
     // Global Shortcut: Ctrl+Alt+C to show/focus
-    globalShortcut.register('CommandOrControl+Alt+C', () => {
-      if (mainWindow) {
-        if (mainWindow.isVisible()) { mainWindow.hide() }
-        else { mainWindow.show(); mainWindow.focus() }
-      }
-    })
+    try {
+      addTrace('Registering Global Shortcut...')
+      globalShortcut.register('CommandOrControl+Alt+C', () => {
+        if (mainWindow) {
+          if (mainWindow.isVisible()) { mainWindow.hide() }
+          else { mainWindow.show(); mainWindow.focus() }
+        }
+      })
+      addTrace('Shortcut registered.')
+    } catch (e) { addTrace(`Shortcut registration failed: ${e}`) }
 
+    addTrace('Checking hasValidConfig()...')
     if (hasValidConfig()) {
+      addTrace('Config is valid.')
       // Phase 10: Check if ANY valid provider is setup (not just Anthropic)
       const authPath = join(OPENCLAW_DIR, 'agents', 'main', 'agent', 'auth-profiles.json')
       
       let hasValidProvider = false
       if (existsSync(authPath)) {
-         const content = readFileSync(authPath, 'utf-8');
-         hasValidProvider = content.includes('"key"') || !!content.match(/"provider"\s*:\s*"(ollama|custom)"/i);
+        const content = readFileSync(authPath, 'utf-8')
+        hasValidProvider = content.includes('"key"') || !!content.match(/"provider"\s*:\s*"(ollama|custom|local)"/i)
       }
+      addTrace(`hasValidProvider initial check: ${hasValidProvider}`)
       
       // Fallback for older configurations or Ollama setups
       if (!hasValidProvider && existsSync(CONFIG_PATH)) {
@@ -1542,41 +1798,56 @@ const startApp = () => {
           const raw = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
           const cfg = JSON.parse(raw)
           const primaryModel = cfg?.agents?.defaults?.model?.primary || cfg?.model || ''
-          if (primaryModel.startsWith('ollama/') || primaryModel.startsWith('custom/')) {
+          if (primaryModel.startsWith('ollama/') || primaryModel.startsWith('custom/') || primaryModel.startsWith('local/')) {
             hasValidProvider = true
           }
         } catch { }
       }
+      addTrace(`hasValidProvider fallback check: ${hasValidProvider}`)
       
       if (!hasValidProvider && !isMinimized) {
-        addLog('[start] Missing AI provider configuration. Routing to main onboarding UI...')
+        addTrace('Missing provider - Routing to onboarding window...')
         createOnboardingWindow()
         return // Halt gateway boot to let user finish setup
       }
 
-      if (!isMinimized) createOnboardingWindow()
+      if (!isMinimized) {
+        addTrace('Attempting to create Onboarding Window (valid config/provider path)...')
+        createOnboardingWindow()
+      }
       // Run gateway start in background
+      addTrace('Initiating gateway.start()...')
       gateway.start().then((started) => {
+        addTrace(`gateway.start() result: ${started}`)
         if (!started) {
           addLog('[start:err] Gateway failed to respond. Remaining in background.')
           return
         }
 
         if (!isMinimized && !mainWindow) {
+          addTrace('Gateway started - Creating main window...')
           createMainWindow()
         }
       })
     } else {
-      if (!isMinimized) createOnboardingWindow()
+      addTrace('Config invalid. Routing to onboarding...')
+      if (!isMinimized) {
+        addTrace('Attempting to create Onboarding Window (invalid config path)...')
+        createOnboardingWindow()
+      }
     }
-
 
     // Check for updates on startup if packaged
-    if (electronApp.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify()
+    if (app.isPackaged) {
+      try {
+        addTrace('Checking for updates...')
+        autoUpdater.checkForUpdatesAndNotify().catch(e => addTrace(`Update check failed (non-fatal): ${e}`))
+      } catch (e) {
+        addTrace(`Update check error (non-fatal): ${e}`)
+      }
     }
 
-    electronApp.on('activate', () => {
+    app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         if (hasValidConfig()) createMainWindow()
         else createOnboardingWindow()
@@ -1584,9 +1855,9 @@ const startApp = () => {
     })
   })
 
-  electronApp.on('will-quit', () => { globalShortcut.unregisterAll() })
-  electronApp.on('window-all-closed', () => { })
-  electronApp.on('before-quit', () => { isQuitting = true; gateway.stop() })
+  app.on('will-quit', () => { globalShortcut.unregisterAll() })
+  app.on('window-all-closed', () => { })
+  app.on('before-quit', () => { isQuitting = true; gateway.stop() })
 }
 
 // Initial Kick-off

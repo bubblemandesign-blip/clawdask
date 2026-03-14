@@ -18,6 +18,8 @@ extraResources:
     to: LICENSE-OPENCLAW.txt
   - from: LICENSE
     to: LICENSE
+  - from: scripts/setup-ollama.ps1
+    to: scripts/setup-ollama.ps1
 asarUnpack:
   - resources/**
   - node_modules/openclaw
@@ -33,11 +35,11 @@ win:
     - appx
   forceCodeSigning: false
 nsis:
-  oneClick: true
-  perMachine: false
+  oneClick: false
+  perMachine: true
   allowElevation: true
-  allowToChangeInstallationDirectory: false
-  createDesktopShortcut: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: "ClawDesk"
   runAfterFinish: true

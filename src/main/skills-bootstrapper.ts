@@ -71,7 +71,7 @@ export async function bootstrapSkills(): Promise<void> {
     }
 
     // 3. Enable "Pro Defaults" if not explicitly disabled
-    const proSkills = ['weather', 'web_search', 'browser', 'model-usage', 'summarize']
+    const proSkills = ['weather', 'web_search', 'browser', 'model-usage', 'summarize', 'shell', 'coding-agent']
     proSkills.forEach(skill => {
         if (config.skills.entries[skill] === undefined) {
             config.skills.entries[skill] = { enabled: true }

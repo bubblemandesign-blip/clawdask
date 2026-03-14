@@ -17,7 +17,9 @@ const clawdeskAPI = {
   getLocalAiAllStatus: () => ipcRenderer.invoke('get-all-local-ai-status'),
   checkDiskSpace: (requiredBytes: number) => ipcRenderer.invoke('check-disk-space', requiredBytes),
   downloadLocalEngine: () => ipcRenderer.invoke('download-local-engine'),
-  downloadLocalModel: (modelId: string) => ipcRenderer.invoke('download-local-model', modelId),
+  downloadLocalModel: (modelId: string, force = false) => ipcRenderer.invoke('download-local-model', modelId, force),
+  detectLocalBackend: () => ipcRenderer.invoke('detect-local-backend'),
+  verifyModelIntegrity: (modelId: string) => ipcRenderer.invoke('verify-model-integrity', modelId),
 
   // Enterprise Logs & Diagnostics
   getLogs: () => ipcRenderer.invoke('get-logs'),

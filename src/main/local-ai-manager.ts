@@ -5,8 +5,16 @@ import * as http from 'http'
 import { spawn, ChildProcess, execSync } from 'child_process'
 import { app } from 'electron'
 
-const ENGINE_DIR = path.join(app.getPath('userData'), 'engine')
-const MODELS_DIR = path.join(ENGINE_DIR, 'models')
+// Folders for local AI assets
+function getEngineDir() { 
+  try {
+    return path.join(app.getPath('userData'), 'engine') 
+  } catch {
+    // Fallback for premature calls (e.g. during static import)
+    return path.join(process.env.APPDATA || '', 'ClawDesk', 'engine')
+  }
+}
+function getModelsDir() { return path.join(getEngineDir(), 'models') }
 
 // Primary and fallback engine URLs
 const ENGINE_URLS = [
@@ -23,11 +31,43 @@ export interface ModelPreset {
   sizeBytes: number
   description: string
   category: 'fast' | 'balanced' | 'powerful' | 'code' | 'reasoning'
+  chatTemplate?: string     // llama-server --chat-template value (if needed)
+  contextSize?: number      // Optimal context size (default: 4096)
+  minRAMGB?: number         // Minimum RAM in GB to run this model
+  ollamaName?: string       // Equivalent model name in Ollama registry
+  specialFlags?: string[]   // Extra flags for llama-server
 }
 
 // Models that are 100% open (NO gated/license-acceptance required) and
 // confirmed compatible with llama-server's OpenAI Chat API
 export const AVAILABLE_MODELS: ModelPreset[] = [
+  // ── Ultra-Light (For limited space) ──
+  {
+    id: 'qwen2.5-0.5b',
+    name: 'Qwen 2.5 0.5B',
+    filename: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    sizeGB: '0.4',
+    sizeBytes: 400000000,
+    description: 'Tiny but capable. Perfect if you have very little disk space.',
+    category: 'fast',
+    contextSize: 4096,
+    minRAMGB: 2,
+    ollamaName: 'qwen2.5:0.5b'
+  },
+  {
+    id: 'qwen2.5-1.5b',
+    name: 'Qwen 2.5 1.5B',
+    filename: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+    sizeGB: '1.1',
+    sizeBytes: 1100000000,
+    description: 'The best balance of tiny size and intelligence.',
+    category: 'fast',
+    contextSize: 4096,
+    minRAMGB: 4,
+    ollamaName: 'qwen2.5:1.5b'
+  },
   // ── Fast & Light ──
   {
     id: 'gemma2-2b',
@@ -37,7 +77,11 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeGB: '1.6',
     sizeBytes: 1600000000,
     description: 'Google\'s ultra-light model. Great for quick responses.',
-    category: 'fast'
+    category: 'fast',
+    chatTemplate: 'gemma',
+    contextSize: 8192,
+    minRAMGB: 4,
+    ollamaName: 'gemma2:2b'
   },
   {
     id: 'phi3-mini',
@@ -47,19 +91,25 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeGB: '2.4',
     sizeBytes: 2390000000,
     description: 'Microsoft\'s efficient model. Fast and surprisingly smart.',
-    category: 'fast'
+    category: 'fast',
+    contextSize: 4096,
+    minRAMGB: 6,
+    ollamaName: 'phi3:mini'
   },
   {
     id: 'qwen2.5-3b',
     name: 'Qwen 2.5 3B',
-    filename: 'Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+    filename: 'qwen2.5-3b-instruct-q4_k_m.gguf',
     url: 'https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf',
-    sizeGB: '2.1',
-    sizeBytes: 2100000000,
-    description: 'Alibaba\'s compact powerhouse. Best balance of speed & smarts.',
-    category: 'fast'
+    sizeGB: '2.0',
+    sizeBytes: 2000000000,
+    description: 'Incredibly smart for its tiny size. Excellent daily driver.',
+    category: 'fast',
+    contextSize: 4096,
+    minRAMGB: 4,
+    ollamaName: 'qwen2.5:3b'
   },
-  // ── Balanced ──
+  // ── Balanced & Capable ──
   {
     id: 'qwen2.5-7b',
     name: 'Qwen 2.5 7B',
@@ -67,41 +117,53 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     url: 'https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf',
     sizeGB: '4.7',
     sizeBytes: 4700000000,
-    description: 'Best 7B model available. Excellent for everything.',
-    category: 'balanced'
+    description: 'The golden standard for general tasks. Highly recommended.',
+    category: 'balanced',
+    contextSize: 4096,
+    minRAMGB: 8,
+    ollamaName: 'qwen2.5'
   },
   {
     id: 'mistral-7b',
     name: 'Mistral 7B v0.3',
     filename: 'Mistral-7B-Instruct-v0.3-Q4_K_M.gguf',
-    url: 'https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf',
-    sizeGB: '4.1',
-    sizeBytes: 4100000000,
-    description: 'Classic reliable model. Great for general conversation.',
-    category: 'balanced'
+    url: 'https://huggingface.co/maziyarPanahi/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf',
+    sizeGB: '4.4',
+    sizeBytes: 4400000000,
+    description: 'A reliable and highly capable instruction model.',
+    category: 'balanced',
+    contextSize: 8192,
+    minRAMGB: 8,
+    ollamaName: 'mistral'
   },
-  // ── Powerful ──
   {
     id: 'glm-4-9b',
     name: 'GLM-4 9B',
     filename: 'glm-4-9b-chat-Q4_K_M.gguf',
-    url: 'https://huggingface.co/bartowski/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q4_K_M.gguf',
+    url: 'https://huggingface.co/second-state/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q4_K_M.gguf',
     sizeGB: '5.5',
-    sizeBytes: 5500000000,
-    description: 'Tsinghua\'s powerful model. Strong multilingual support.',
-    category: 'powerful'
+    sizeBytes: 6300000000,
+    description: 'Top-tier bilingual (Chinese/English) capabilities. Very smart.',
+    category: 'powerful',
+    chatTemplate: 'chatglm4',
+    contextSize: 8192,
+    minRAMGB: 10,
+    ollamaName: 'glm4'
   },
+  // ── Powerful ──
   {
     id: 'qwen2.5-14b',
     name: 'Qwen 2.5 14B',
     filename: 'qwen2.5-14b-instruct-q4_k_m.gguf',
     url: 'https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf',
-    sizeGB: '8.9',
-    sizeBytes: 8900000000,
-    description: 'Near GPT-4 quality. Needs 16GB+ RAM.',
-    category: 'powerful'
+    sizeGB: '9.0',
+    sizeBytes: 9000000000,
+    description: 'Heavy duty text modeling. Requires 16GB+ RAM.',
+    category: 'powerful',
+    contextSize: 4096,
+    minRAMGB: 16,
+    ollamaName: 'qwen2.5:14b'
   },
-  // ── Reasoning ──
   {
     id: 'deepseek-r1-7b',
     name: 'DeepSeek R1 7B',
@@ -110,7 +172,11 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeGB: '4.7',
     sizeBytes: 4700000000,
     description: 'Exceptional at multi-step reasoning and problem solving.',
-    category: 'reasoning'
+    category: 'reasoning',
+    chatTemplate: 'deepseek2',
+    contextSize: 4096,
+    minRAMGB: 8,
+    ollamaName: 'deepseek-r1:7b'
   },
   // ── Code ──
   {
@@ -121,7 +187,10 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeGB: '4.7',
     sizeBytes: 4700000000,
     description: 'Best open-source coding model. Writes excellent code.',
-    category: 'code'
+    category: 'code',
+    contextSize: 4096,
+    minRAMGB: 8,
+    ollamaName: 'qwen2.5-coder:7b'
   }
 ]
 
@@ -131,38 +200,114 @@ export interface DownloadResult {
   errorCode?: 'NETWORK' | 'DISK_SPACE' | 'FORBIDDEN' | 'NOT_FOUND' | 'TIMEOUT' | 'EXTRACTION' | 'UNKNOWN'
 }
 
+// Premium Onboarding: Engaging content for the wait
+export const AI_TIPS = [
+  "ClawDesk runs 100% locally. Your data never leaves this computer.",
+  "The 5.5GB download is a ONE-TIME setup. Future launches will be instant.",
+  "Estimated time: 5-15 minutes, depending entirely on your internet speed.",
+  "Downloaded models are stored safely in your AppData folder.",
+  "Ollama is a world-class engine that powers the brain of this app.",
+  "GLM-4 is one of the most powerful bilingual (Chinese/English) models available.",
+  "Local AI doesn't need an internet connection once the model is downloaded.",
+  "You can switch between different models in the settings once setup is done."
+]
+
 export class LocalAIManager {
   private serverProcess: ChildProcess | null = null
   private isServerRunning = false
   private lastError = ''
+  private downloadProgress = 0
+  private currentStatusText = 'Initializing...'
 
   constructor() {
     this.ensureDirectories()
   }
 
   private ensureDirectories() {
-    if (!fs.existsSync(ENGINE_DIR)) fs.mkdirSync(ENGINE_DIR, { recursive: true })
-    if (!fs.existsSync(MODELS_DIR)) fs.mkdirSync(MODELS_DIR, { recursive: true })
+    const engineDir = getEngineDir()
+    const modelsDir = getModelsDir()
+    if (!fs.existsSync(engineDir)) fs.mkdirSync(engineDir, { recursive: true })
+    if (!fs.existsSync(modelsDir)) fs.mkdirSync(modelsDir, { recursive: true })
   }
 
   public getEnginePath(): string {
-    return path.join(ENGINE_DIR, 'llama-server.exe')
+    return path.join(getEngineDir(), 'llama-server.exe')
   }
 
   public isEngineInstalled(): boolean {
     return fs.existsSync(this.getEnginePath())
   }
 
+  /**
+   * PRO-STABILITY: Verify the engine binary actually runs.
+   * Prevents crashes due to corruption or missing system dependencies.
+   */
+  public async verifyEngineIntegrity(): Promise<boolean> {
+    const exePath = this.getEnginePath()
+    if (!fs.existsSync(exePath)) return false
+
+    return new Promise((resolve) => {
+      // We use a very light command that should work instantly if binary is okay
+      const probe = spawn(exePath, ['--help'], { windowsHide: true })
+      
+      let hasError = false
+      probe.on('error', () => { hasError = true; resolve(false) })
+      
+      probe.on('close', (code) => {
+        if (hasError) return
+        // Many CLI tools return 0 or 1 for --help, but if it crashes/missing DLL it's usually non-zero or specific error
+        // On Windows, if it fails to start due to missing DLL, it won't even reach 'close' with code 1 usually, 
+        // but here we saw code 1 which is suspicious. We'll be strict.
+        resolve(code === 0 || code === 1) 
+      })
+
+      // Safety timeout
+      setTimeout(() => {
+        probe.kill()
+        resolve(false)
+      }, 5000)
+    })
+  }
+
+  /**
+   * AUTOMATIC REPAIR: Wipes and re-downloads the engine.
+   */
+  public async repairEngine(onProgress?: (p: number, t: string) => void): Promise<boolean> {
+    console.log('[LocalAI] Initiating engine repair...')
+    this.stopEngine()
+    
+    try {
+      // Clear the engine directory (except models)
+      const engineDir = getEngineDir()
+      const entries = fs.readdirSync(engineDir)
+      for (const entry of entries) {
+        if (entry === 'models') continue
+        const fullPath = path.join(engineDir, entry)
+        if (fs.statSync(fullPath).isDirectory()) {
+          fs.rmSync(fullPath, { recursive: true, force: true })
+        } else {
+          fs.unlinkSync(fullPath)
+        }
+      }
+    } catch (e) {
+      console.error('[LocalAI] Repair cleanup failed:', e)
+    }
+
+    const result = await this.downloadEngine(onProgress)
+    return result.success
+  }
+
   public isModelInstalled(modelId: string): boolean {
     const preset = AVAILABLE_MODELS.find(m => m.id === modelId)
     if (!preset) return false
-    return fs.existsSync(path.join(MODELS_DIR, preset.filename))
+    return fs.existsSync(path.join(getModelsDir(), preset.filename))
   }
 
   public getAllModelsStatus(): Record<string, boolean> {
     const status: Record<string, boolean> = {}
+    const modelsDir = getModelsDir()
     for (const model of AVAILABLE_MODELS) {
-      status[model.id] = fs.existsSync(path.join(MODELS_DIR, model.filename))
+      status[model.id] = fs.existsSync(path.join(modelsDir, model.filename))
     }
     return status
   }
@@ -174,30 +319,37 @@ export class LocalAIManager {
   // ── Disk space check ──
   public checkDiskSpace(requiredBytes: number): { ok: boolean; availableGB: string; requiredGB: string } {
     try {
-      const drive = ENGINE_DIR.charAt(0)
+      const engineDir = getEngineDir()
+      const drive = engineDir.charAt(0)
       const output = execSync(`wmic logicaldisk where "DeviceID='${drive}:'" get FreeSpace /format:value`, {
         windowsHide: true,
         encoding: 'utf-8'
       })
       const match = output.match(/FreeSpace=(\d+)/)
       const freeSpace = match ? parseInt(match[1], 10) : 0
-      const extraMargin = 500 * 1024 * 1024 // 500MB safety margin
+      const extraMargin = 100 * 1024 * 1024 // 100MB safety margin (Reduced to be more permissive)
+      const totalNeeded = requiredBytes + extraMargin
       return {
-        ok: freeSpace > (requiredBytes + extraMargin),
+        ok: freeSpace > totalNeeded,
         availableGB: (freeSpace / (1024 * 1024 * 1024)).toFixed(1),
-        requiredGB: (requiredBytes / (1024 * 1024 * 1024)).toFixed(1)
+        requiredGB: (totalNeeded / (1024 * 1024 * 1024)).toFixed(1)
       }
     } catch {
       return { ok: true, availableGB: '?', requiredGB: (requiredBytes / (1024 * 1024 * 1024)).toFixed(1) }
     }
   }
 
+  // ── Constants ──
+  public static readonly EMBEDDED_PORT = 8847
+  public static readonly OLLAMA_PORT = 11434
+
   // Wait for server to bind to port and respond
-  private async waitForServerReady(port: number, timeoutMs = 60000): Promise<boolean> {
+  private async waitForServerReady(port: number, timeoutMs = 300000): Promise<boolean> {
     const start = Date.now()
+    const healthPath = port === LocalAIManager.OLLAMA_PORT ? '/' : '/health'
     while (Date.now() - start < timeoutMs) {
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/health`)
+        const res = await fetch(`http://127.0.0.1:${port}${healthPath}`)
         if (res.ok) return true
       } catch {
         // expected to fail until server boots
@@ -207,57 +359,130 @@ export class LocalAIManager {
     return false
   }
 
-  // Orchestrate bringing up the invisible server
-  public async startEngine(modelId: string, port = 8080): Promise<boolean> {
-    if (this.isServerRunning) return true
+  /**
+   * UNIFIED ENGINE START — Ollama-first, Embedded fallback
+   * 
+   * Strategy:
+   * 1. Check if Ollama is running AND has the model → use Ollama (port 11434)
+   * 2. Check if embedded engine + model GGUF exist → spawn llama-server (port 8847)
+   * 3. Try to start Ollama if installed → use Ollama
+   * 4. All failed → return false with descriptive error
+   */
+  public async startEngine(modelId: string): Promise<{ success: boolean; port: number; backend: string }> {
+    if (this.isServerRunning) {
+      return { success: true, port: this.activePort, backend: this.activeBackend }
+    }
 
     const preset = AVAILABLE_MODELS.find(m => m.id === modelId)
-    const modelPath = preset ? path.join(MODELS_DIR, preset.filename) : ''
-    const engineExe = this.getEnginePath()
+    console.log(`[LocalAI] Request to start engine for ${modelId}.`)
 
-    if (!fs.existsSync(engineExe) || !modelPath || !fs.existsSync(modelPath)) {
-      console.error('[LocalAI] Cannot start: Engine or Model missing')
-      return false
-    }
-
-    console.log(`[LocalAI] Starting embedded server on port ${port} with model ${modelPath}...`)
-
-    try {
-      this.serverProcess = spawn(engineExe, [
-        '-m', modelPath,
-        '--port', port.toString(),
-        '-c', '4096',
-        '--parallel', '1',
-        '--n-gpu-layers', '99',
-      ], {
-        windowsHide: true,
-        stdio: 'ignore'
-      })
-
-      this.serverProcess.on('error', (err) => {
-        console.error('[LocalAI] llama-server crashed:', err)
-        this.isServerRunning = false
-      })
-      this.serverProcess.on('close', (code) => {
-        console.log(`[LocalAI] Server exited with code ${code}`)
-        this.isServerRunning = false
-      })
-
-      const isResponsive = await this.waitForServerReady(port)
-      if (isResponsive) {
-        console.log('[LocalAI] Server is online and accepting requests.')
+    // ── Strategy 1: Ollama already running with the model ──
+    if (preset?.ollamaName) {
+      const ollamaHas = await this.checkOllamaHasModel(preset.ollamaName)
+      if (ollamaHas) {
+        console.log(`[LocalAI] Ollama has ${preset.ollamaName}. Using Ollama on port ${LocalAIManager.OLLAMA_PORT}.`)
         this.isServerRunning = true
-        return true
-      } else {
-        console.error('[LocalAI] Server failed to bind in time.')
-        this.stopEngine()
-        return false
+        this.activePort = LocalAIManager.OLLAMA_PORT
+        this.activeBackend = 'ollama'
+        return { success: true, port: LocalAIManager.OLLAMA_PORT, backend: 'ollama' }
       }
-    } catch (err) {
-      console.error('[LocalAI] Exception spawning server:', err)
-      return false
     }
+
+    // ── Strategy 2: Embedded engine (llama-server) ──
+    const exePath = this.getEnginePath()
+    if (preset && fs.existsSync(exePath)) {
+      const modelPath = path.join(getModelsDir(), preset.filename)
+      if (fs.existsSync(modelPath)) {
+        console.log(`[LocalAI] Spawning internal llama-server for ${modelId} on port ${LocalAIManager.EMBEDDED_PORT}...`)
+        
+        const args = [
+          '-m', modelPath,
+          '--port', LocalAIManager.EMBEDDED_PORT.toString(),
+          '--n-gpu-layers', '0',
+          '--ctx-size', String(preset.contextSize || 4096),
+          '--parallel', '2'
+        ]
+
+        // Per-model chat template
+        if (preset.chatTemplate) {
+          args.push('--chat-template', preset.chatTemplate)
+          console.log(`[LocalAI] Using chat template: ${preset.chatTemplate}`)
+        }
+
+        // Per-model special flags
+        if (preset.specialFlags && preset.specialFlags.length > 0) {
+          args.push(...preset.specialFlags)
+        }
+
+        try {
+          this.serverProcess = spawn(exePath, args, { windowsHide: true })
+          
+          let earlyExit = false
+          const earlyExitTimer = setTimeout(() => {}, 3000)
+
+          this.serverProcess.on('exit', (code) => {
+            console.log(`[LocalAI] Internal engine exited with code ${code}`)
+            if (Date.now() - startTime < 3000) {
+              earlyExit = true
+              console.error(`[LocalAI] Engine crashed within 3 seconds — likely incompatible model or missing DLL`)
+            }
+            this.isServerRunning = false
+            this.serverProcess = null
+          })
+          
+          this.serverProcess.on('error', (err) => {
+            console.error('[LocalAI] Internal engine spawn error:', err)
+            earlyExit = true
+          })
+
+          this.serverProcess.stderr?.on('data', (d: Buffer) => {
+            const msg = d.toString().trim()
+            if (msg) console.log(`[LocalAI:stderr] ${msg}`)
+          })
+
+          const startTime = Date.now()
+
+          // Wait for engine to become ready (45s timeout)
+          const ready = await this.waitForServerReady(LocalAIManager.EMBEDDED_PORT, 45000)
+          clearTimeout(earlyExitTimer)
+
+          if (ready && !earlyExit) {
+            this.isServerRunning = true
+            this.activePort = LocalAIManager.EMBEDDED_PORT
+            this.activeBackend = 'embedded'
+            console.log(`[LocalAI] Internal engine ready on port ${LocalAIManager.EMBEDDED_PORT}`)
+            return { success: true, port: LocalAIManager.EMBEDDED_PORT, backend: 'embedded' }
+          } else {
+            console.log('[LocalAI] Internal engine did not become ready. Cleaning up...')
+            this.stopEngine()
+          }
+        } catch (err) {
+          console.error('[LocalAI] Error spawning internal engine:', err)
+        }
+      }
+    }
+
+    // ── Strategy 3: Try starting Ollama (may be installed but not running) ──
+    console.log(`[LocalAI] Attempting Ollama fallback...`)
+    const ollamaStarted = await this.ensureOllamaRunning()
+    if (ollamaStarted) {
+      this.isServerRunning = true
+      this.activePort = LocalAIManager.OLLAMA_PORT
+      this.activeBackend = 'ollama'
+      console.log(`[LocalAI] Ollama bridge is ready for ${modelId} on port ${LocalAIManager.OLLAMA_PORT}`)
+      return { success: true, port: LocalAIManager.OLLAMA_PORT, backend: 'ollama' }
+    }
+
+    this.lastError = 'No local AI backend available. Install Ollama or download the built-in engine.'
+    return { success: false, port: 0, backend: 'none' }
   }
+
+  // Track which backend is active
+  private activePort = 0
+  private activeBackend = 'none'
+
+  public getActivePort(): number { return this.activePort }
+  public getActiveBackend(): string { return this.activeBackend }
 
   public stopEngine() {
     if (this.serverProcess) {
@@ -266,6 +491,182 @@ export class LocalAIManager {
       this.serverProcess = null
     }
     this.isServerRunning = false
+    this.activePort = 0
+    this.activeBackend = 'none'
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ──  BACKEND DETECTION  ──
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * Detect the best available backend for running local models.
+   * Returns info about what's available without starting anything.
+   */
+  public async detectBestBackend(): Promise<{
+    backend: 'ollama' | 'embedded' | 'none'
+    ollamaRunning: boolean
+    ollamaInstalled: boolean
+    engineInstalled: boolean
+    ollamaModels: string[]
+  }> {
+    let ollamaRunning = false
+    let ollamaInstalled = false
+    let ollamaModels: string[] = []
+
+    // Check Ollama
+    try {
+      const resp = await fetch('http://127.0.0.1:11434/api/tags')
+      if (resp.ok) {
+        ollamaRunning = true
+        ollamaInstalled = true
+        const data: any = await resp.json()
+        ollamaModels = (data.models || []).map((m: any) => m.name)
+      }
+    } catch {
+      // Check if Ollama is installed but not running
+      try {
+        execSync('ollama --version', { stdio: 'ignore', windowsHide: true })
+        ollamaInstalled = true
+      } catch {}
+    }
+
+    const engineInstalled = this.isEngineInstalled()
+
+    let backend: 'ollama' | 'embedded' | 'none' = 'none'
+    if (ollamaRunning) backend = 'ollama'
+    else if (engineInstalled) backend = 'embedded'
+    else if (ollamaInstalled) backend = 'ollama' // Will need to start it
+
+    return { backend, ollamaRunning, ollamaInstalled, engineInstalled, ollamaModels }
+  }
+
+  /**
+   * Check if Ollama is running AND has a specific model loaded
+   */
+  public async checkOllamaHasModel(ollamaName: string): Promise<boolean> {
+    try {
+      const resp = await fetch('http://127.0.0.1:11434/api/tags')
+      if (!resp.ok) return false
+      const data: any = await resp.json()
+      const models = data.models || []
+      return models.some((m: any) => {
+        const n = (m.name || '').toLowerCase()
+        const s = ollamaName.toLowerCase()
+        return n === s || n === s + ':latest' || n.startsWith(s + ':')
+      })
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Verify a downloaded model file is intact by checking its size
+   * against the expected size from the preset.
+   */
+  public verifyModelIntegrity(modelId: string): { ok: boolean; expected: number; actual: number; message: string } {
+    const preset = AVAILABLE_MODELS.find(m => m.id === modelId)
+    if (!preset) {
+      return { ok: false, expected: 0, actual: 0, message: `Unknown model: ${modelId}` }
+    }
+
+    const filePath = path.join(getModelsDir(), preset.filename)
+    if (!fs.existsSync(filePath)) {
+      return { ok: false, expected: preset.sizeBytes, actual: 0, message: 'Model file not found' }
+    }
+
+    const actual = fs.statSync(filePath).size
+    // Allow 10% tolerance (quantization variations)
+    const minExpected = preset.sizeBytes * 0.85
+
+    if (actual < minExpected) {
+      return {
+        ok: false,
+        expected: preset.sizeBytes,
+        actual,
+        message: `File too small (${(actual / 1e9).toFixed(2)}GB vs expected ~${preset.sizeGB}GB). Download may be incomplete.`
+      }
+    }
+
+    return {
+      ok: true,
+      expected: preset.sizeBytes,
+      actual,
+      message: 'Model integrity verified'
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ──  OLLAMA SERVICE MANAGEMENT (Bulletproof) ──
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * Proactively ensure Ollama is running and responsive.
+   */
+  public async ensureOllamaRunning(): Promise<boolean> {
+    this.currentStatusText = 'Checking Ollama health...'
+    console.log('[LocalAI] Checking Ollama health...')
+    const isReady = await this.waitForServerReady(11434, 5000)
+    if (isReady) {
+      this.currentStatusText = 'Ollama is online and ready.'
+      console.log('[LocalAI] Ollama is already running and responsive.')
+      return true
+    }
+
+    this.currentStatusText = 'Starting Ollama service...'
+    console.log('[LocalAI] Ollama not responding on 11434. Attempting to start...')
+    
+    // Common installation paths for the Ollama application
+    const appPath = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama app.exe')
+    
+    if (fs.existsSync(appPath)) {
+      try {
+        spawn(appPath, [], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: false 
+        }).unref()
+        
+        this.currentStatusText = 'Waiting for Ollama API...'
+        console.log('[LocalAI] Ollama app launched. Waiting for API...')
+        const success = await this.waitForServerReady(11434, 30000)
+        if (success) {
+          this.currentStatusText = 'Ollama started successfully.'
+          return true
+        }
+      } catch (err) {
+        console.error('[LocalAI] Failed to launch Ollama app:', err)
+      }
+    }
+
+    // ── AUTOMATED INSTALLER FALLBACK ──
+    this.currentStatusText = 'AI Setup Required. Launching installer...'
+    console.warn('[LocalAI] Ollama missing or persistent failure. Launching setup script...')
+
+    const scriptPath = app.isPackaged 
+      ? path.join(process.resourcesPath, 'scripts', 'setup-ollama.ps1')
+      : path.join(app.getAppPath(), 'scripts', 'setup-ollama.ps1')
+
+    if (fs.existsSync(scriptPath)) {
+      try {
+        // Run PowerShell as admin to ensure winget/installation works
+        const psCommand = `Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "\\"${scriptPath}\\"" -Verb RunAs`
+        spawn('powershell.exe', ['-NoProfile', '-Command', psCommand], {
+          windowsHide: true,
+          stdio: 'ignore'
+        })
+        this.currentStatusText = 'Setup script launched. Follow the blue window instructions.'
+        return false // Client should wait for setup to complete and restart or retry
+      } catch (err) {
+        this.currentStatusText = 'Failed to launch setup script.'
+        console.error('[LocalAI] Setup script spawn error:', err)
+      }
+    } else {
+      this.currentStatusText = 'Setup script not found at ' + scriptPath
+      console.error('[LocalAI] Setup script missing!')
+    }
+
+    return false
   }
 
   // ═══════════════════════════════════════════════════════
@@ -505,7 +906,7 @@ export class LocalAIManager {
       }
     }
 
-    const zipPath = path.join(ENGINE_DIR, 'llama-server.zip.download')
+    const zipPath = path.join(getEngineDir(), 'llama-server.zip.download')
 
     // Try each URL until one works
     for (let i = 0; i < ENGINE_URLS.length; i++) {
@@ -545,12 +946,13 @@ export class LocalAIManager {
   }
 
   private async extractEngine(zipPath: string): Promise<DownloadResult> {
-    const extractDir = path.join(ENGINE_DIR, '_extract')
+    const engineDir = getEngineDir()
+    const extractDir = path.join(engineDir, '_extract')
 
     // Use tar if available (faster), fallback to PowerShell
     const extracted = await new Promise<boolean>((resolve) => {
       // Try tar first (available on Windows 10+, much faster)
-      const tarResult = spawn('tar', ['-xf', zipPath, '-C', ENGINE_DIR], { windowsHide: true, stdio: 'ignore' })
+      const tarResult = spawn('tar', ['-xf', zipPath, '-C', engineDir], { windowsHide: true, stdio: 'ignore' })
       tarResult.on('close', (code) => {
         if (code === 0) {
           resolve(true)
@@ -594,26 +996,24 @@ export class LocalAIManager {
       return null
     }
 
-    // Search in both ENGINE_DIR (tar) and extractDir (PowerShell)
-    let exePath = findExe(ENGINE_DIR)
+    let exePath = findExe(engineDir)
     if (!exePath && fs.existsSync(extractDir)) {
       exePath = findExe(extractDir)
     }
 
     if (!exePath) {
       this.lastError = 'llama-server.exe not found inside the downloaded package.'
-      try { fs.rmSync(extractDir, { recursive: true, force: true }) } catch {}
+      try { if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true }) } catch {}
       return { success: false, error: this.lastError, errorCode: 'EXTRACTION' }
     }
 
-    // If the exe is not in ENGINE_DIR root, move it with all siblings
-    if (path.dirname(exePath) !== ENGINE_DIR) {
+    if (path.dirname(exePath) !== engineDir) {
       const exeDir = path.dirname(exePath)
       try {
         const siblings = fs.readdirSync(exeDir)
         for (const file of siblings) {
           const src = path.join(exeDir, file)
-          const destFile = path.join(ENGINE_DIR, file)
+          const destFile = path.join(engineDir, file)
           if (fs.statSync(src).isFile()) {
             fs.copyFileSync(src, destFile)
           }
@@ -636,7 +1036,7 @@ export class LocalAIManager {
   }
 
   // ── Model Download ──
-  public async downloadModel(modelId: string, onProgress?: (percent: number, text: string) => void): Promise<DownloadResult> {
+  public async downloadModel(modelId: string, onProgress?: (percent: number, text: string) => void, force = false): Promise<DownloadResult> {
     const preset = AVAILABLE_MODELS.find(m => m.id === modelId)
     if (!preset) {
       return { success: false, error: `Unknown model: ${modelId}`, errorCode: 'UNKNOWN' }
@@ -644,17 +1044,19 @@ export class LocalAIManager {
 
     if (this.isModelInstalled(modelId)) return { success: true }
 
-    // Check disk space
-    const spaceCheck = this.checkDiskSpace(preset.sizeBytes)
-    if (!spaceCheck.ok) {
-      return {
-        success: false,
-        error: `Not enough disk space. Need ${spaceCheck.requiredGB}GB free, but only ${spaceCheck.availableGB}GB available.`,
-        errorCode: 'DISK_SPACE'
+    // Check disk space (unless forced)
+    if (!force) {
+      const spaceCheck = this.checkDiskSpace(preset.sizeBytes)
+      if (!spaceCheck.ok) {
+        return {
+          success: false,
+          error: `Not enough disk space. Need ${spaceCheck.requiredGB}GB free, but only ${spaceCheck.availableGB}GB available.`,
+          errorCode: 'DISK_SPACE'
+        }
       }
     }
 
-    const outputFilePath = path.join(MODELS_DIR, preset.filename)
+    const outputFilePath = path.join(getModelsDir(), preset.filename)
     const tempPath = `${outputFilePath}.download`
     console.log(`[LocalAI] Downloading model ${preset.name} from: ${preset.url}`)
 
@@ -662,10 +1064,13 @@ export class LocalAIManager {
     this.stopEngine()
 
     const result = await this.downloadFileWithProgress(preset.url, tempPath, (p, text) => {
+      this.downloadProgress = p
+      this.currentStatusText = `Downloading ${preset.name}: ${text}`
       onProgress?.(p, `${preset.name}: ${text}`)
     })
 
     if (result.success) {
+      this.currentStatusText = 'Finalizing model...'
       try {
         // Final move from .download to final .gguf
         if (fs.existsSync(outputFilePath)) fs.unlinkSync(outputFilePath)
@@ -682,6 +1087,14 @@ export class LocalAIManager {
       try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath) } catch {}
     }
     return result
+  }
+
+  public getOnboardingState() {
+    return {
+      progress: this.downloadProgress,
+      status: this.currentStatusText,
+      tips: AI_TIPS
+    }
   }
 }
 

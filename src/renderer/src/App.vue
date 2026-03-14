@@ -3,6 +3,14 @@ import { ref, computed, onMounted, watch } from 'vue'
 
 // State
 const step = ref<'checking' | 'setup' | 'capabilities' | 'security' | 'channels' | 'personality' | 'audio' | 'starting' | 'error'>('checking')
+
+// Backend detection state
+const detectedBackend = ref<'ollama' | 'embedded' | 'none'>('none')
+const backendChecked = ref(false)
+const backendOllamaRunning = ref(false)
+const backendOllamaInstalled = ref(false)
+const backendEngineInstalled = ref(false)
+const backendOllamaModels = ref<string[]>([])
 const provider = ref('openai')
 const apiKey = ref('')
 const customBaseUrl = ref('')
@@ -55,7 +63,7 @@ watch(() => step.value, (v) => v === 'starting' ? startQuotes() : stopQuotes())
 
 // Capabilities state
 const enableWebBrowser = ref(true)
-const enableComputerControl = ref(false)
+const enableComputerControl = ref(true)
 
 // Security state
 const dmPolicy = ref('pairing')
@@ -77,7 +85,7 @@ const ttsProvider = ref('edge')
 const api = (window as any).api
 
 const providers = [
-  { id: 'embedded', name: 'Local AI (Zero Setup)', placeholder: '', keyUrl: '', isLocal: true },
+  { id: 'local', name: 'Local AI', placeholder: '', keyUrl: '', isLocal: true },
   { id: 'moonshot', name: 'Moonshot (Kimi)', placeholder: 'sk-...', keyUrl: 'https://platform.moonshot.cn' },
   { id: 'openai', name: 'OpenAI', placeholder: 'sk-...', keyUrl: 'https://platform.openai.com/api-keys' },
   { id: 'anthropic', name: 'Claude', placeholder: 'sk-ant-...', keyUrl: 'https://console.anthropic.com/settings/keys' },
@@ -88,7 +96,6 @@ const providers = [
   { id: 'xai', name: 'xAI', placeholder: 'xai-...', keyUrl: 'https://console.x.ai' },
   { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...', keyUrl: 'https://platform.deepseek.com/api_keys' },
   { id: 'together', name: 'Together', placeholder: 'tog-...', keyUrl: 'https://api.together.xyz/settings/api-keys' },
-  { id: 'ollama', name: 'Ollama (Expert)', placeholder: 'No key required', keyUrl: '', isLocal: true },
   { id: 'custom', name: 'Custom API', placeholder: 'API key', keyUrl: '' }
 ]
 
@@ -177,34 +184,23 @@ const modelVersions = computed<Record<string, { id: string, name: string }[]>>((
       { id: 'moonshot/moonshot-v1-32k', name: 'Moonshot V1 (32K Context)' },
       { id: 'moonshot/moonshot-v1-128k', name: 'Moonshot V1 (128K Context)' }
     ],
-    embedded: [
+    local: [
+      // Ultra-Light
+      { id: 'local/qwen2.5-0.5b', name: '🪶 Qwen 2.5 0.5B (Tiny) - 0.4GB' + (isEmbeddedDownloaded('qwen2.5-0.5b') ? ' ✅' : '') },
+      { id: 'local/qwen2.5-1.5b', name: '🪶 Qwen 2.5 1.5B (Light) - 1.1GB' + (isEmbeddedDownloaded('qwen2.5-1.5b') ? ' ✅' : '') },
       // Fast & Light
       { id: 'local/gemma2-2b', name: '⚡ Gemma 2 2B (Ultra Fast) - 1.6GB' + (isEmbeddedDownloaded('gemma2-2b') ? ' ✅' : '') },
       { id: 'local/phi3-mini', name: '⚡ Phi-3 Mini (Fast) - 2.4GB' + (isEmbeddedDownloaded('phi3-mini') ? ' ✅' : '') },
-      { id: 'local/qwen2.5-3b', name: '⚡ Qwen 2.5 3B (Smart & Fast) - 2.1GB' + (isEmbeddedDownloaded('qwen2.5-3b') ? ' ✅' : '') },
+      { id: 'local/qwen2.5-3b', name: '⚡ Qwen 2.5 3B (Smart & Fast) - 2.0GB' + (isEmbeddedDownloaded('qwen2.5-3b') ? ' ✅' : '') },
       // Balanced
       { id: 'local/qwen2.5-7b', name: '🔥 Qwen 2.5 7B (Best Balance) - 4.7GB' + (isEmbeddedDownloaded('qwen2.5-7b') ? ' ✅' : '') },
-      { id: 'local/mistral-7b', name: '🔥 Mistral 7B v0.3 (Classic) - 4.1GB' + (isEmbeddedDownloaded('mistral-7b') ? ' ✅' : '') },
+      { id: 'local/mistral-7b', name: '🔥 Mistral 7B v0.3 (Classic) - 4.4GB' + (isEmbeddedDownloaded('mistral-7b') ? ' ✅' : '') },
       // Powerful
       { id: 'local/glm-4-9b', name: '💪 GLM-4 9B (Powerful) - 5.5GB' + (isEmbeddedDownloaded('glm-4-9b') ? ' ✅' : '') },
-      { id: 'local/qwen2.5-14b', name: '💪 Qwen 2.5 14B (Near GPT-4) - 8.9GB' + (isEmbeddedDownloaded('qwen2.5-14b') ? ' ✅' : '') },
+      { id: 'local/qwen2.5-14b', name: '💪 Qwen 2.5 14B (Near GPT-4) - 9.0GB' + (isEmbeddedDownloaded('qwen2.5-14b') ? ' ✅' : '') },
       // Specialist
       { id: 'local/deepseek-r1-7b', name: '🧠 DeepSeek R1 7B (Reasoning) - 4.7GB' + (isEmbeddedDownloaded('deepseek-r1-7b') ? ' ✅' : '') },
       { id: 'local/qwen2.5-coder-7b', name: '💻 Qwen 2.5 Coder 7B (Code) - 4.7GB' + (isEmbeddedDownloaded('qwen2.5-coder-7b') ? ' ✅' : '') }
-    ],
-    ollama: [
-      { id: 'ollama/glm4', name: 'GLM-4 9B' + vramTag(4) + (isModelDownloaded('glm4') ? ' ✅' : '') },
-      { id: 'ollama/qwen2.5', name: 'Qwen 2.5 7B' + vramTag(4) + (isModelDownloaded('qwen2.5') ? ' ✅' : '') },
-      { id: 'ollama/phi4', name: 'Phi-4 14B' + vramTag(6) + (isModelDownloaded('phi4') ? ' ✅' : '') },
-      { id: 'ollama/gemma2', name: 'Gemma 2 9B' + vramTag(5) + (isModelDownloaded('gemma2') ? ' ✅' : '') },
-      { id: 'ollama/mistral', name: 'Mistral 7B v0.3' + vramTag(4) + (isModelDownloaded('mistral') ? ' ✅' : '') },
-      { id: 'ollama/llama3.1', name: 'Llama 3.1 8B' + vramTag(5) + (isModelDownloaded('llama3.1') ? ' ✅' : '') },
-      { id: 'ollama/deepseek-r1:7b', name: 'DeepSeek R1 7B' + vramTag(4) + (isModelDownloaded('deepseek-r1:7b') ? ' ✅' : '') },
-      { id: 'ollama/codegemma', name: 'CodeGemma 7B' + vramTag(4) + (isModelDownloaded('codegemma') ? ' ✅' : '') },
-      { id: 'ollama/starcoder2', name: 'StarCoder2 7B' + vramTag(4) + (isModelDownloaded('starcoder2') ? ' ✅' : '') },
-      { id: 'ollama/deepseek-coder-v2', name: 'DeepSeek Coder V2' + vramTag(8) + (isModelDownloaded('deepseek-coder-v2') ? ' ✅' : '') },
-      { id: 'ollama/llama3.3', name: 'Llama 3.3 70B' + vramTag(24) + (isModelDownloaded('llama3.3') ? ' ✅' : '') },
-      { id: 'ollama/qwen2.5:32b', name: 'Qwen 2.5 32B' + vramTag(12) + (isModelDownloaded('qwen2.5:32b') ? ' ✅' : '') }
     ]
   }
 })
@@ -216,9 +212,8 @@ watch(provider, async (newProv) => {
   const models = modelVersions.value[newProv]
   if (models && models.length > 0) {
     selectedModel.value = models[0].id
-    if (newProv === 'ollama') {
-      await refreshOllamaStatus()
-    } else if (newProv === 'embedded') {
+    if (newProv === 'local') {
+      await detectBackend()
       await refreshEmbeddedStatus()
     }
   } else {
@@ -228,12 +223,25 @@ watch(provider, async (newProv) => {
 
 // Re-check when user changes model selection
 watch(selectedModel, async () => {
-  if (provider.value === 'ollama') {
-    await checkModelStatus()
-  } else if (provider.value === 'embedded') {
+  if (provider.value === 'local') {
     await refreshEmbeddedStatus()
   }
 })
+
+async function detectBackend() {
+  backendChecked.value = false
+  try {
+    const result = await api.detectLocalBackend()
+    detectedBackend.value = result.backend
+    backendOllamaRunning.value = result.ollamaRunning
+    backendOllamaInstalled.value = result.ollamaInstalled
+    backendEngineInstalled.value = result.engineInstalled
+    backendOllamaModels.value = result.ollamaModels || []
+  } catch {
+    detectedBackend.value = 'none'
+  }
+  backendChecked.value = true
+}
 
 async function refreshOllamaStatus() {
   try {
@@ -296,7 +304,7 @@ async function startModelPull() {
 }
 
 async function refreshEmbeddedStatus(forceCheck = false) {
-  if (!forceCheck && provider.value !== 'embedded') return
+  if (!forceCheck && provider.value !== 'local' && provider.value !== 'embedded') return
   const modelId = selectedModel.value.replace('local/', '') || 'qwen2.5-3b'
   embeddedChecked.value = false
   try {
@@ -310,8 +318,16 @@ async function refreshEmbeddedStatus(forceCheck = false) {
   embeddedChecked.value = true
 }
 
-async function startEmbeddedPull() {
+async function startEmbeddedPull(force = false) {
+  if (typeof force !== 'boolean') force = false // Handle event payload case
+  
+  // 1. Instant state reset
   embeddedError.value = ''
+  embeddedStatus.value = force ? 'Starting fresh attempt (Bypassing checks)...' : 'Starting fresh attempt...'
+  isDownloadingEmbedded.value = true
+  
+  // 2. Minor visual pause to show the user we acknowledged the click
+  await new Promise(r => setTimeout(r, 400))
   
   if (!embeddedEngineInstalled.value) {
     isDownloadingEmbedded.value = true
@@ -329,7 +345,7 @@ async function startEmbeddedPull() {
     if (result.success) {
        embeddedEngineInstalled.value = true
        if (!embeddedModelInstalled.value) {
-         await downloadModelOnly()
+         await downloadModelOnly(force)
        } else {
          embeddedStatus.value = 'Engine installed!'
          setTimeout(() => { isDownloadingEmbedded.value = false }, 1500)
@@ -340,11 +356,11 @@ async function startEmbeddedPull() {
        isDownloadingEmbedded.value = false
     }
   } else if (!embeddedModelInstalled.value) {
-    await downloadModelOnly()
+    await downloadModelOnly(force)
   }
 }
 
-async function downloadModelOnly() {
+async function downloadModelOnly(force = false) {
   const modelId = selectedModel.value.replace('local/', '') || 'qwen2.5-3b'
   embeddedError.value = ''
   isDownloadingEmbedded.value = true
@@ -356,7 +372,8 @@ async function downloadModelOnly() {
     embeddedStatus.value = data.text
   })
 
-  const result = await api.downloadLocalModel(modelId)
+  // PASS THE FORCE FLAG TO THE IPC
+  const result = await api.downloadLocalModel(modelId, force)
   unsub()
   
   if (result.success) {
@@ -389,8 +406,17 @@ onMounted(async () => {
     }
 
     const result = await api.checkOpenClaw()
-    if (result.isGatewayStarting) {
+    if (result.hasValidConfig || result.isGatewayStarting) {
       step.value = 'starting'
+      if (!result.isGatewayStarting) {
+        // Trigger start-app automatically if not already starting
+        api.startApp().then((res: any) => {
+          if (!res.success) {
+            step.value = 'error'
+            errorMessage.value = res.error
+          }
+        })
+      }
     } else {
       step.value = 'setup'
     }
@@ -425,10 +451,8 @@ async function saveAndStart() {
   errorMessage.value = ''
 
   try {
-    if (provider.value === 'ollama') {
-      await api.saveApiKey('ollama', 'ollama-local')
-    } else if (provider.value === 'embedded') {
-      await api.saveApiKey('custom', 'local-embedded')
+    if (provider.value === 'local') {
+      await api.saveApiKey('local', 'local-embedded')
     } else if (apiKey.value.trim()) {
       await api.saveApiKey(provider.value, apiKey.value.trim())
     }
@@ -454,8 +478,9 @@ async function saveAndStart() {
     
     if (isCustom.value) {
       config.baseUrl = customBaseUrl.value.trim()
-    } else if (provider.value === 'embedded') {
-      config.baseUrl = 'http://127.0.0.1:8080/v1'
+    } else if (provider.value === 'local') {
+      // Port will be dynamically set by the backend detection
+      config.baseUrl = 'http://127.0.0.1:8847/v1'
     }
 
     const saveResult = await api.saveConfig(config)
@@ -546,58 +571,24 @@ async function saveAndStart() {
             />
           </template>
 
-          <template v-if="provider === 'ollama'">
-            <!-- Ollama Status Badge -->
+          <!-- Unified Local AI UI -->
+          <template v-if="provider === 'local'">
+            <!-- Backend Detection Banner -->
             <div class="ollama-status" style="margin-top: 20px;">
-              <span v-if="!ollamaChecked" class="status-badge checking">⏳ Checking Ollama...</span>
-              <span v-else-if="!ollamaInstalled" class="status-badge error">❌ Ollama Not Installed</span>
-              <span v-else-if="ollamaRunning" class="status-badge online">🟢 Ollama Running</span>
-              <span v-else class="status-badge offline">🟡 Ollama Offline (Auto-Start)</span>
+              <span v-if="!backendChecked" class="status-badge checking">🔍 Detecting AI engine...</span>
+              <span v-else-if="backendOllamaRunning" class="status-badge online">🟢 Ollama Detected (GPU Accelerated)</span>
+              <span v-else-if="backendEngineInstalled" class="status-badge online">⚡ Built-in Engine Ready (CPU)</span>
+              <span v-else-if="backendOllamaInstalled" class="status-badge offline">🟡 Ollama Found (Not Running)</span>
+              <span v-else class="status-badge offline">🟡 Download Required</span>
             </div>
 
-            <p class="status-sub" style="margin-bottom: 12px; margin-top: 8px; font-size: 13px;">Ollama is free and runs locally on your machine. No API key needed.</p>
-            
-            <div v-if="ollamaChecked && !ollamaInstalled" class="model-pull-section" style="border-color: rgba(232, 107, 107, 0.3); background: rgba(232, 107, 107, 0.05); margin-bottom: 12px;">
-              <p style="font-size: 13px; color: #e86b6b; font-weight: 600; margin-bottom: 4px;">⚠️ Action Required: Install Ollama</p>
-              <p style="font-size: 12px; line-height: 1.4; color: #666;">You selected a local model, but Ollama is not installed on your system. Please download and install it from <a href="#" @click.prevent="api.openLink('https://ollama.com')" style="color: #4a90e2; text-decoration: underline;">ollama.com</a> before continuing.</p>
-            </div>
-            
-            <!-- Model already installed -->
-            <div v-if="modelInstalled && ollamaRunning" class="model-pull-section" style="border-color: rgba(107, 187, 107, 0.3); background: rgba(107, 187, 107, 0.05);">
-              <p style="font-size: 13px; color: #6bbb6b; font-weight: 600; margin-bottom: 4px;">✅ {{ selectedModel.split('/')[1] }} is already downloaded!</p>
-              <p style="font-size: 11px; color: #888;">Clicking continue below will <b>NOT</b> download it again. It will simply start.</p>
-            </div>
-            
-            <!-- Model NOT installed but Ollama IS running -->
-            <div v-else-if="ollamaRunning && !modelInstalled" class="model-pull-section">
-              <button class="btn btn-secondary" @click="startModelPull" :disabled="isPulling">
-                <span v-if="isPulling" class="spinner-small" style="margin-right: 8px;"></span>
-                {{ isPulling ? 'Downloading...' : '⬇️ Download ' + selectedModel.split('/')[1] }}
-              </button>
-              <div v-if="isPulling" class="progress-container">
-                <div class="progress-bar" :style="{ width: pullProgress + '%' }"></div>
-                <span class="progress-text">{{ pullStatus }} ({{ pullProgress }}%)</span>
-                <p v-if="currentQuote" class="status-sub" style="margin-top: 12px; font-style: italic; color: #888; font-size: 12px; text-align: center;">"{{ currentQuote }}"</p>
-              </div>
-              <p v-else class="status-sub" style="margin-top: 8px; color: #888;">Or skip to continue without downloading.</p>
-            </div>
-
-            <!-- Ollama NOT running -->
-            <div v-else-if="!ollamaRunning && ollamaChecked" style="margin-bottom: 12px;">
-              <p class="status-sub" style="font-size: 12px; color: #e8a838;">⚠️ Ollama is not running. Start it first, or continue anyway and configure later.</p>
-            </div>
-          </template>
-
-          <!-- Embedded Local AI UI -->
-          <template v-if="provider === 'embedded'">
             <!-- Status Badge -->
-            <div class="ollama-status" style="margin-top: 20px;">
-              <span v-if="!embeddedChecked" class="status-badge checking">⏳ Initializing Engine...</span>
-              <span v-else-if="embeddedEngineInstalled && embeddedModelInstalled" class="status-badge online">🟢 Ready & Installed</span>
-              <span v-else class="status-badge offline">🟡 Components Missing</span>
+            <div v-if="backendChecked" class="ollama-status" style="margin-top: 8px;">
+              <span v-if="embeddedModelInstalled" class="status-badge online">✅ Model Ready</span>
+              <span v-else class="status-badge offline">📦 Model Needed</span>
             </div>
 
-            <p class="status-sub" style="margin-bottom: 12px; margin-top: 8px; font-size: 13px;">ClawDesk runs entirely offline via a powerful built-in core. Zero setup required.</p>
+            <p class="status-sub" style="margin-bottom: 12px; margin-top: 8px; font-size: 13px;">Runs 100% offline on your machine. Your data never leaves this computer.</p>
             
             <!-- Missing Comps -->
             <div v-if="embeddedChecked && (!embeddedEngineInstalled || !embeddedModelInstalled)" class="model-pull-section" style="border-color: rgba(66, 153, 225, 0.4); background: rgba(66, 153, 225, 0.05); margin-bottom: 12px;">
@@ -608,7 +599,7 @@ async function saveAndStart() {
                 <span> must be downloaded securely to your device.</span>
               </p>
               
-              <button class="btn btn-secondary" @click="startEmbeddedPull" :disabled="isDownloadingEmbedded">
+              <button class="btn btn-secondary" @click="() => startEmbeddedPull(false)" :disabled="isDownloadingEmbedded">
                 <span v-if="isDownloadingEmbedded" class="spinner-small" style="margin-right: 8px;"></span>
                 {{ isDownloadingEmbedded ? 'Downloading Component...' : '⬇️ Download Now' }}
               </button>
@@ -623,9 +614,14 @@ async function saveAndStart() {
               <div v-if="embeddedError" class="model-pull-section" style="border-color: rgba(232, 107, 107, 0.4); background: rgba(232, 107, 107, 0.08); margin-top: 10px;">
                 <p style="font-size: 13px; color: #e86b6b; font-weight: 600; margin-bottom: 6px;">❌ Download Failed</p>
                 <p style="font-size: 12px; line-height: 1.5; color: #ccc; margin-bottom: 10px;">{{ embeddedError }}</p>
-                <button class="btn btn-secondary" @click="startEmbeddedPull" style="font-size: 12px;">
-                  🔄 Retry Download
-                </button>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <button class="btn btn-secondary" @click="startEmbeddedPull(false)" style="font-size: 12px; flex: 1;">
+                    🔄 Retry Check
+                  </button>
+                  <button v-if="embeddedError.includes('disk space')" class="btn btn-secondary" @click="startEmbeddedPull(true)" style="font-size: 12px; flex: 1; border-color: rgba(232, 107, 107, 0.6); color: #e86b6b;">
+                    ⚠️ Continue Anyway
+                  </button>
+                </div>
               </div>
             </div>
             
@@ -649,10 +645,10 @@ async function saveAndStart() {
 
           <button
             class="btn btn-primary"
-            :disabled="(!isLocal && !apiKey.trim()) || (isCustom && !customBaseUrl.trim()) || (provider === 'ollama' && !ollamaInstalled) || (provider === 'embedded' && (!embeddedEngineInstalled || !embeddedModelInstalled))"
+            :disabled="(!isLocal && !apiKey.trim()) || (isCustom && !customBaseUrl.trim()) || (provider === 'local' && !embeddedModelInstalled && !backendOllamaRunning)"
             @click="goToCapabilities"
           >
-            {{ provider === 'embedded' ? `Start using ${selectedModel.split('/')[1]}` : (provider === 'ollama' && modelInstalled ? `Start using ${selectedModel.split('/')[1]}` : (provider === 'ollama' && !modelInstalled ? 'Skip Download & Continue' : 'Continue')) }}
+            {{ provider === 'local' ? (embeddedModelInstalled ? `Start using ${selectedModel.split('/')[1]}` : 'Continue') : 'Continue' }}
           </button>
         </div>
       </div>
@@ -802,22 +798,39 @@ async function saveAndStart() {
         </div>
       </div>
 
-      <!-- Starting -->
-      <div v-if="step === 'starting'" class="content">
-        <div class="spinner-container">
-          <div class="spinner"></div>
-          <p class="status-text">Starting Gateway…</p>
-          <p class="status-sub" style="font-weight: 600; color: #6bbb6b; margin-top: 12px">{{ startupStatus }}</p>
-          <p v-if="currentQuote" class="status-sub" style="margin-top: 24px; font-style: italic; color: #888; font-size: 13px;">"{{ currentQuote }}"</p>
+      <!-- Starting / Booting Phase -->
+      <div v-if="step === 'starting'" class="content starting-phase">
+        <div class="glow-container">
+          <div class="main-glow"></div>
+          <svg class="boot-logo" viewBox="0 0 40 40">
+            <path d="M8 28 L14 12 L20 22 L26 12 L32 28" stroke="white" stroke-width="2.5" fill="none" class="dash-animate"/>
+          </svg>
+        </div>
+        
+        <div class="status-stack">
+          <h2 class="boot-title">Initializing...</h2>
+          <p class="boot-status">{{ startupStatus }}</p>
+          
+          <div class="boot-progress-alt">
+            <div class="boot-bar-ind"></div>
+          </div>
+          
+          <p class="boot-quote">"{{ currentQuote }}"</p>
         </div>
       </div>
 
-      <!-- Error -->
+      <!-- Error State -->
       <div v-if="step === 'error'" class="content">
-        <div class="error-section">
-          <div class="error-dot"></div>
-          <p class="error-msg">{{ errorMessage }}</p>
-          <button class="btn btn-secondary" @click="step = 'setup'">Retry</button>
+        <div class="error-container">
+          <div class="error-icon-box">
+             <span class="error-icon">⚠️</span>
+          </div>
+          <h2 class="error-title">Startup Blocked</h2>
+          <p class="error-text">{{ errorMessage }}</p>
+          <div class="error-actions" style="display: flex; gap: 8px; margin-top: 24px;">
+            <button class="btn btn-secondary" style="margin-top: 0" @click="step = 'setup'">Settings</button>
+            <button class="btn btn-primary" style="margin-top: 0" @click="saveAndStart">Retry Boot</button>
+          </div>
         </div>
       </div>
     </div>
@@ -904,5 +917,28 @@ async function saveAndStart() {
 .status-badge.offline { color: #e8a838; background: rgba(232, 168, 56, 0.1); border: 1px solid rgba(232, 168, 56, 0.2); }
 .status-badge.checking { color: #888; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); }
 .error { color: #cc4444; font-size: 12px; margin-top: 8px; text-align: center; }
+
+/* ── Starting Phase Premium ── */
+.starting-phase { text-align: center; padding: 40px 0; }
+.glow-container { position: relative; width: 80px; height: 80px; margin: 0 auto 30px; }
+.main-glow { position: absolute; inset: 0; background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%); filter: blur(15px); animation: pulse 2s infinite ease-in-out; }
+.boot-logo { width: 100%; height: 100%; position: relative; z-index: 2; }
+.dash-animate { stroke-dasharray: 100; stroke-dashoffset: 100; animation: dash 2s infinite ease-in-out; }
+@keyframes dash { 0% { stroke-dashoffset: 100; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -100; } }
+@keyframes pulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
+
+.boot-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 8px; letter-spacing: -0.5px; }
+.boot-status { color: #6bbb6b; font-size: 14px; font-weight: 500; min-height: 20px; }
+.boot-progress-alt { width: 160px; height: 3px; background: rgba(255,255,255,0.05); margin: 24px auto; border-radius: 10px; overflow: hidden; position: relative; }
+.boot-bar-ind { position: absolute; height: 100%; width: 40px; background: #fff; border-radius: 10px; animation: slide 1.5s infinite ease-in-out; }
+@keyframes slide { from { left: -40px; } to { left: 160px; } }
+.boot-quote { font-size: 12px; font-style: italic; color: #555; max-width: 280px; margin: 0 auto; line-height: 1.4; }
+
+/* ── Error Container ── */
+.error-container { padding: 20px 0; }
+.error-icon-box { width: 50px; height: 50px; background: rgba(204, 68, 68, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+.error-icon { font-size: 24px; }
+.error-title { font-size: 18px; font-weight: 700; color: #f0f0f0; margin-bottom: 8px; }
+.error-text { font-size: 13px; color: #888; line-height: 1.6; max-width: 320px; margin: 0 auto; }
 </style>
 
