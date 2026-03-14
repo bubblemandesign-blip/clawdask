@@ -418,7 +418,18 @@ export class LocalAIManager {
           this.serverProcess = spawn(exePath, args, { windowsHide: true })
           
           let earlyExit = false
-          const earlyExitTimer = setTimeout(() => {}, 3000)
+          const earlyExitTimer = setTimeout(() => earlyExit = true, 3000)
+          
+          // ── ADDED: Fake progress bar for UI during 30s-60s memory allocation ──
+          this.downloadProgress = 1
+          this.currentStatusText = `Allocating memory for ${preset?.name || modelId}...`
+          const progressInterval = setInterval(() => {
+            if (this.downloadProgress < 95) {
+              this.downloadProgress += 2
+            }
+          }, 1000)
+
+          const startTime = Date.now()
 
           this.serverProcess.on('exit', (code) => {
             console.log(`[LocalAI] Internal engine exited with code ${code}`)
@@ -440,16 +451,17 @@ export class LocalAIManager {
             if (msg) console.log(`[LocalAI:stderr] ${msg}`)
           })
 
-          const startTime = Date.now()
-
           // Wait for engine to become ready (45s timeout)
           const ready = await this.waitForServerReady(LocalAIManager.EMBEDDED_PORT, 45000)
           clearTimeout(earlyExitTimer)
+          clearInterval(progressInterval)
 
           if (ready && !earlyExit) {
             this.isServerRunning = true
             this.activePort = LocalAIManager.EMBEDDED_PORT
             this.activeBackend = 'embedded'
+            this.downloadProgress = 100
+            this.currentStatusText = `${preset?.name || modelId} is ready!`
             console.log(`[LocalAI] Internal engine ready on port ${LocalAIManager.EMBEDDED_PORT}`)
             return { success: true, port: LocalAIManager.EMBEDDED_PORT, backend: 'embedded' }
           } else {

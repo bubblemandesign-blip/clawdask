@@ -513,11 +513,11 @@ class GatewayManager {
     let readyPort: number | null = null
     let attempts = 0
     // Increased patience for the first boot, especially if AI is downloading
-    // 300 attempts * 5s = 25 minutes. If it takes longer, the user can just wait.
-    const maxAttempts = 300 
+    // 1500 attempts * 1s = 25 minutes. If it takes longer, the user can just wait.
+    const maxAttempts = 1500 
     
     while (attempts < maxAttempts) {
-      readyPort = await waitForPortRange(GATEWAY_PORT, GATEWAY_PORT + 10, 5000)
+      readyPort = await waitForPortRange(GATEWAY_PORT, GATEWAY_PORT + 10, 1000)
       if (readyPort) break
       
       attempts++
@@ -533,7 +533,7 @@ class GatewayManager {
       }
       
       // Wait before next check
-      await new Promise(r => setTimeout(r, 5000))
+      await new Promise(r => setTimeout(r, 1000))
     }
 
     if (readyPort) {
