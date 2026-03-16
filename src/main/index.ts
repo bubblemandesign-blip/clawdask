@@ -7,7 +7,7 @@ try {
 process.env['OLLAMA_API_KEY'] = 'ollama-local'
 
 // Core imports
-import { app, BrowserWindow, globalShortcut } from 'electron'
+import { app, BrowserWindow, globalShortcut, dialog } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { join, dirname } from 'path'
 import { ChildProcess, spawn, execSync } from 'child_process'
@@ -41,6 +41,28 @@ addTrace('--- APP START (BOOTSTRAP) ---')
 
 import { bootstrapSkills } from './skills-bootstrapper'
 import { localAIManager, AVAILABLE_MODELS } from './local-ai-manager'
+// ─── Cloud Path Sentinel ──────────────────────────────────────────────
+function checkCloudPath(): boolean {
+  const appPath = app.getAppPath().toLowerCase()
+  const dangerousPaths = ['onedrive', 'dropbox', 'google drive', 'desktop', 'سطح المكتب']
+  
+  if (dangerousPaths.some(p => appPath.includes(p))) {
+    addTrace(`CLOUD PATH DETECTED: ${appPath}`)
+    return true
+  }
+  return false
+}
+
+function showCloudWarning(): void {
+  dialog.showMessageBoxSync({
+    type: 'warning',
+    title: '⚠️ Cloud Path Detected',
+    message: 'ClawDesk is running from a synced folder (OneDrive/Desktop).',
+    detail: 'This WILL corrupt your AI models and crash the gateway.\n\nPlease move the application folder to C:\\ClawDesk before continuing.',
+    buttons: ['I will move it now', 'Ignore (Risky)']
+  })
+}
+
 // Dev-mode userData path fix (deferred until app is definitively available)
 function setupDevPath() {
   try {
@@ -58,6 +80,58 @@ const APP_ID = 'com.clawdesk.app'
 let GATEWAY_PORT = 18789
 let GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`
 const CONFIG_PATH = join(OPENCLAW_DIR, 'openclaw.json')
+import crypto from 'crypto'
+
+// ─── Self-Healing: Auto-repair missing OpenClaw build output ─────────
+function repairOpenClawDist(): void {
+  try {
+    // Search in multiple possible locations
+    const candidates = [
+      join(app.getAppPath(), '..', 'app.asar.unpacked', 'node_modules', 'openclaw'),
+      join(dirname(app.getPath('exe')), 'resources', 'app.asar.unpacked', 'node_modules', 'openclaw'),
+      'C:\\ClawDesk\\resources\\app.asar.unpacked\\node_modules\\openclaw'
+    ]
+    
+    for (const openclawDir of candidates) {
+      const distDir = join(openclawDir, 'dist')
+      const entryMjs = join(distDir, 'entry.mjs')
+      const indexJs = join(distDir, 'index.js')
+      
+      if (existsSync(distDir) && existsSync(indexJs) && !existsSync(entryMjs)) {
+        addTrace(`[self-heal] Repairing missing entry.mjs in ${distDir}`)
+        writeFileSync(entryMjs, 'import "./index.js";\n')
+        addTrace('[self-heal] entry.mjs restored successfully')
+      }
+    }
+  } catch (e) {
+    addTrace(`[self-heal] Repair attempt failed (non-fatal): ${e}`)
+  }
+}
+
+// ─── Self-Healing: Ensure gateway token exists in config ─────────────
+function ensureGatewayToken(): string {
+  try {
+    if (!existsSync(CONFIG_PATH)) return ''
+    const raw = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
+    const config = JSON.parse(raw)
+    
+    let token = config?.gateway?.auth?.token
+    if (!token) {
+      // Auto-generate a secure token
+      token = crypto.randomBytes(24).toString('base64url')
+      if (!config.gateway) config.gateway = {}
+      if (!config.gateway.auth) config.gateway.auth = {}
+      config.gateway.auth.mode = 'token'
+      config.gateway.auth.token = token
+      writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+      addTrace(`[self-heal] Auto-generated gateway token: ${token.substring(0, 8)}...`)
+    }
+    return token
+  } catch (e) {
+    addTrace(`[self-heal] Token ensure failed: ${e}`)
+    return ''
+  }
+}
 
 // ─── Enterprise Logs ─────────────────────────────────────────────────────
 const MAX_LOGS = 1000
@@ -231,14 +305,19 @@ class GatewayManager {
   private findCloudflared(): string | null {
     const { app } = require('electron')
     const possiblePaths = [
-      join(app.getAppPath(), 'cloudflared.exe'),
+      join(app.getAppPath(), 'cloudflared.exe').replace('app.asar', 'app.asar.unpacked'),
+      join(process.resourcesPath, 'app.asar.unpacked', 'cloudflared.exe'),
       join(process.resourcesPath, 'cloudflared.exe'),
       join(process.cwd(), 'cloudflared.exe'),
       'cloudflared.exe'
     ]
     for (const p of possiblePaths) {
-      if (existsSync(p)) return p
+      if (existsSync(p)) {
+        addTrace(`Cloudflared found at: ${p}`)
+        return p
+      }
     }
+    addTrace('WARNING: cloudflared.exe not found in standard locations.')
     return null
   }
 
@@ -335,32 +414,40 @@ class GatewayManager {
       const config = JSON.parse(rawConfig)
       
       const primaryModel = config?.agents?.defaults?.model?.primary || config?.model || ''
+      const targetModelId = config.models?.primaryModel || primaryModel || 'local/glm-4-9b'
+      const engineModelId = targetModelId.replace('local/', '').replace('ollama/', '')
+      addLog(`[FORENSIC:ID:999] Active Code Active. Model: ${targetModelId}`)
+      addTrace(`[local-ai] Initialization for model: ${targetModelId} (Engine: ${engineModelId})`)
       
       // ─── OLLAMA NATIVE SUPPORT ───
       if (primaryModel.startsWith('ollama/')) {
         addLog('[gateway] Detected Ollama model. Ensuring service is active...')
         sendGatewayStatus('Verifying Ollama service...')
+        addTrace('[local-ai] Attempting Ollama native boot...')
         const ollamaOk = await localAIManager.ensureOllamaRunning()
         if (ollamaOk) {
           addLog('[gateway] Ollama service is active and responsive.')
+          addTrace('[local-ai] Ollama service is ready.')
         } else {
           addLog('[gateway:err] Ollama service could not be started automatically.')
+          addTrace('[local-ai] ERROR: Ollama service failed to start.')
         }
         return
       }
 
       // ─── UNIFIED LOCAL ENGINE SUPPORT ───
-      if (!primaryModel.startsWith('local/')) return
-      
-      const targetModelId = primaryModel.replace('local/', '')
+      if (!primaryModel.startsWith('local/')) {
+        addTrace(`[local-ai] Model ${primaryModel} does not use a local provider. Skipping initialization.`)
+        return
+      }
       
       // 1. Verify model integrity if already downloaded
-      if (localAIManager.isModelInstalled(targetModelId)) {
-        const integrity = localAIManager.verifyModelIntegrity(targetModelId)
+      if (localAIManager.isModelInstalled(engineModelId)) {
+        const integrity = localAIManager.verifyModelIntegrity(engineModelId)
         if (!integrity.ok) {
           addLog(`[gateway:warn] Model integrity check failed: ${integrity.message}. Re-downloading...`)
-          sendGatewayStatus(`Re-downloading corrupted AI Model (${targetModelId})...`)
-          const modelDownloaded = await localAIManager.downloadModel(targetModelId, undefined, true)
+          sendGatewayStatus(`Re-downloading corrupted AI Model (${engineModelId})...`)
+          const modelDownloaded = await localAIManager.downloadModel(engineModelId, undefined, true)
           if (!modelDownloaded.success) {
             addLog(`[gateway:err] Failed to re-download model: ${modelDownloaded.error}`)
             return
@@ -369,10 +456,10 @@ class GatewayManager {
       }
       
       // 2. Check for missing model
-      if (!localAIManager.isModelInstalled(targetModelId)) {
-        addLog(`[gateway:err] Model ${targetModelId} is missing. Attempting proactive download...`)
-        sendGatewayStatus(`Downloading AI Model (${targetModelId})...`)
-        const modelDownloaded = await localAIManager.downloadModel(targetModelId)
+      if (!localAIManager.isModelInstalled(engineModelId)) {
+        addLog(`[gateway:err] Model ${engineModelId} is missing. Attempting proactive download...`)
+        sendGatewayStatus(`Downloading AI Model (${engineModelId})...`)
+        const modelDownloaded = await localAIManager.downloadModel(engineModelId)
         if (!modelDownloaded.success) {
           addLog(`[gateway:err] Failed to proactively download model: ${modelDownloaded.error}`)
           return
@@ -381,20 +468,46 @@ class GatewayManager {
 
       // 3. Start the engine (Ollama-first, embedded fallback)
       sendGatewayStatus('Warming up local AI engine...')
-      const result = await localAIManager.startEngine(targetModelId)
+      let result = await localAIManager.startEngine(targetModelId)
       
+      // ── AUTO-REPAIR: If engine is missing, download it ──
+      if (!result.success && result.errorCode === 'ENGINE_MISSING') {
+        addLog(`[gateway:warn] Local engine binary missing. Initiating automatic download...`)
+        sendGatewayStatus('Engine missing. Downloading Core AI...')
+        const download = await localAIManager.downloadEngine()
+        if (download.success) {
+           addLog('[gateway] Core AI downloaded. Retrying engine start...')
+           result = await localAIManager.startEngine(engineModelId)
+        }
+      }
       if (result.success) {
         addLog(`[gateway] Local AI engine (${result.backend}) active on port ${result.port}`)
         
-        // Update config baseUrl to match the active port
+        // Update config baseUrl AND models list to match the active port and registry
         try {
-          const cfg = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, ''))
-          if (cfg.models?.providers?.local) {
+          const raw = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
+          const cfg = JSON.parse(raw)
+          if (!cfg.models) cfg.models = {}
+          if (!cfg.models.providers) cfg.models.providers = {}
+          
+          if (cfg.models.providers.local) {
             cfg.models.providers.local.baseUrl = `http://127.0.0.1:${result.port}/v1`
+            // Systemic Fix: Populate the registry so gateway doesn't 404 early
+            cfg.models.providers.local.models = AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name }))
+            
             writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2))
-            addLog(`[gateway] Updated config baseUrl to port ${result.port}`)
+            addLog(`[gateway] Sync Complete: Port ${result.port}, Registry Size: ${cfg.models.providers.local.models.length}`)
+            addTrace(`[local-ai] Config hardened. Local provider now points to port ${result.port}`)
+          } else {
+             addLog(`[gateway:warn] Local provider missing in config. Attempting recovery...`)
+             // If missing, we should probably add it, but for now we log it.
           }
-        } catch {}
+        } catch (e) {
+          addLog(`[gateway:err] Failed to write updated config: ${e}`)
+        }
+      } else if (result.errorCode === 'INITIALIZING') {
+        addLog(`[gateway] Local AI engine (${result.backend}) is currently warming up/pulling.`)
+        sendGatewayStatus('Digital brain is warming up... Please wait.')
       } else {
         addLog('[gateway:err] Local AI engine failed to start: ' + localAIManager.getLastError())
       }
@@ -446,10 +559,17 @@ class GatewayManager {
     this.ensureEnvironment()
     this.preStartConfigCleanup()
     
-    // STARTING LOCAL ENGINE IN BACKGROUND - No longer blocking the gateway boot
-    sendGatewayStatus('Initializing background AI services...')
-    this.ensureLocalEngineRunning().catch(e => addLog(`[gateway:err] Background AI initialization failed: ${e}`))
+    // STARTING LOCAL ENGINE - Blocking to ensure config is correct before gateway reads it
+    sendGatewayStatus('Initializing local AI brain...')
+    addLog('[gateway] Ensuring local AI engine is ready...')
+    await this.ensureLocalEngineRunning().catch(e => {
+      addLog(`[gateway:err] AI initialization encountered a problem: ${e}`)
+    })
+    addLog('[gateway] Local AI check complete.')
 
+    // ── SELF-HEAL: Repair missing build output before spawning ──
+    repairOpenClawDist()
+    
     console.log(`[gateway] Starting: ${bin}`)
     sendGatewayStatus('Booting OpenClaw Engine...')
 
@@ -507,7 +627,6 @@ class GatewayManager {
     })
 
     sendGatewayStatus('Waiting for secure port allocation...')
-    sendGatewayStatus('Waiting for secure port allocation...')
     
     // ── RESILIENT PORT ALLOCATION ──
     let readyPort: number | null = null
@@ -522,14 +641,22 @@ class GatewayManager {
       
       attempts++
       const onboarding = localAIManager.getOnboardingState()
-      addTrace(`Gateway port probe ${attempts}/${maxAttempts}. Status: ${onboarding.status}`)
       
+      // ── CRITICAL: Check if the process crashed while we were waiting ──
+      if ((this.state as string) === 'crashed') {
+        const msg = '[gateway:err] Gateway process failed to stay alive during boot.'
+        addLog(msg)
+        addLog('[gateway:warn] TIP: If the app is in OneDrive/Desktop, it may be corrupting files. Move it to C:\\ClawDesk.')
+        return false
+      }
+
       // If AI is actually doing something (downloading/starting), be verbose
-      if (onboarding.progress > 0 || onboarding.status !== 'Initializing...') {
-         const progressText = onboarding.progress > 0 ? ` (${Math.round(onboarding.progress)}%)` : ''
-         sendGatewayStatus(`${onboarding.status}${progressText}`)
+      if (onboarding.progress < 100) {
+        const progressText = onboarding.progress > 0 ? ` (${Math.round(onboarding.progress)}%)` : ''
+        sendGatewayStatus(`${onboarding.status}${progressText}`)
       } else {
-         sendGatewayStatus(`Waking up AI engine...`)
+        const bootSeconds = Math.max(1, 10 - attempts)
+        sendGatewayStatus(`Digital brain is active! ✨ Launching Dashboard... (~${bootSeconds}s)`)
       }
       
       // Wait before next check
@@ -547,6 +674,16 @@ class GatewayManager {
       this.startTunnelSync()
       this.updateTray()
       sendGatewayStatus('Connected! Handing over to Dashboard...')
+      
+      // ── CRITICAL: Trigger main window creation immediately ──
+      const electron = require('electron')
+      if (electron && electron.app) {
+        // We emit a custom event or just call the create function if accessible
+        // In this architecture, we rely on the renderer detecting the port,
+        // but we can force it here if we had a direct reference.
+        // For now, setting state to 'running' is the key signal.
+      }
+
       return true
     }
     this.state = 'crashed'
@@ -874,17 +1011,31 @@ function createMainWindow(): void {
   if (!electron) return
   const { BrowserWindow } = electron
   mainWindow = new BrowserWindow({
-    width: 1100, height: 750, minWidth: 800, minHeight: 600,
-    show: false, autoHideMenuBar: true, title: 'ClawDesk',
-    backgroundColor: '#0a0a0a',
+    width: 1280,
+    height: 800,
+    show: false,
+    autoHideMenuBar: true,
     icon: join(__dirname, '../../resources/icon.png'),
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      webSecurity: false // Systemic: Required for cross-origin local AI dashboard calls
+    }
   })
 
   mainWindow.on('ready-to-show', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show()
     if (onboardingWindow && !onboardingWindow.isDestroyed()) onboardingWindow.close()
   })
+
+  // ─── STALL PREVENTION: Force show if ready-to-show takes > 5s ───
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show()
+      if (onboardingWindow && !onboardingWindow.isDestroyed()) onboardingWindow.close()
+    }
+  }, 5000)
 
   mainWindow.on('close', (e) => {
     if (!isQuitting) { e.preventDefault(); mainWindow?.hide() }
@@ -898,15 +1049,13 @@ function createMainWindow(): void {
     return { action: 'deny' }
   })
 
+  // ── SELF-HEALING TOKEN: Ensure the dashboard always loads authenticated ──
+  const gatewayToken = ensureGatewayToken()
   let initialUrl = GATEWAY_URL
-  try {
-    if (existsSync(CONFIG_PATH)) {
-      const rawConfig = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
-      const config = JSON.parse(rawConfig)
-      const token = config.gateway?.auth?.token
-      if (token) initialUrl += `?token=${token}`
-    }
-  } catch {}
+  if (gatewayToken) {
+    initialUrl += `?token=${gatewayToken}`
+  }
+  addTrace(`[main-window] Loading: ${GATEWAY_URL} (token: ${gatewayToken ? 'present' : 'MISSING'})`)
 
   mainWindow.loadURL(initialUrl)
 
@@ -921,7 +1070,7 @@ function createMainWindow(): void {
       div[class*="SetupWizard"], div[class*="Onboarding"] { display: none !important; }
 
       /* ── Replace OpenClaw logo with ClawDesk style ── */
-      [alt="OpenClaw Logo"], .openclaw-logo, img[src*="logo"], svg:has(path[d*="M12 2A10 10 0"]) {
+      [alt="OpenClaw Logo"], .openclaw-logo, img[src*="logo"], svg:has(path[d*="M12 2A10 10 1"]) {
         display: none !important;
       }
 
@@ -1110,15 +1259,48 @@ function createMainWindow(): void {
           const tokenScript = `
             (function() {
               const TOKEN = "${token}";
+              
+              // 1. Force into Storage
               const keys = ["openclaw-token", "gateway-token", "token"];
               keys.forEach(k => {
-                if (localStorage.getItem(k) !== TOKEN) localStorage.setItem(k, TOKEN);
-                if (sessionStorage.getItem(k) !== TOKEN) sessionStorage.setItem(k, TOKEN);
+                localStorage.setItem(k, TOKEN);
+                sessionStorage.setItem(k, TOKEN);
               });
-              // We no longer trigger a location.href reload here. 
-              // The main window's initialURL already included ?token=XYZ.
+
+              // 2. Auto-Fill and Click (if UI is visible and shows "Unauthorized" or "Token Required")
+              function attemptAutoConnect() {
+                // Look for input fields that might be asking for a token
+                const inputs = document.querySelectorAll('input[type="password"], input[type="text"]');
+                let foundInput = false;
+                
+                inputs.forEach(input => {
+                  const placeholder = (input.placeholder || "").toLowerCase();
+                  if (placeholder.includes("token") || placeholder.includes("password") || placeholder.includes("key")) {
+                    if (input.value !== TOKEN) {
+                      input.value = TOKEN;
+                      input.dispatchEvent(new Event('input', { bubbles: true }));
+                      foundInput = true;
+                    }
+                  }
+                });
+
+                // Find the Connect/Authorize button
+                const buttons = document.querySelectorAll('button');
+                buttons.forEach(btn => {
+                  const text = (btn.textContent || "").toLowerCase();
+                  if (text.includes("connect") || text.includes("login") || text.includes("authorize") || text.includes("save")) {
+                    btn.click();
+                  }
+                });
+              }
+
+              // Run immediately and then poll a few times as the app mounts
+              setTimeout(attemptAutoConnect, 1000);
+              setTimeout(attemptAutoConnect, 3000);
+              setTimeout(attemptAutoConnect, 5000);
             })();
           `;
+          addTrace(`[auth] Injecting automation script (token: ${token.substring(0, 5)}...)`)
           mainWindow?.webContents.executeJavaScript(tokenScript);
         }
       }
@@ -1279,8 +1461,8 @@ function setupIPC(): void {
           }
         },
         tools: {
-          profile: c.enableComputerControl ? 'coding' : 'messaging',
-          allow: c.enableWebBrowser ? ['browser', 'web_search', 'web_fetch'] : undefined
+          profile: c.enableComputerControl !== false ? 'coding' : 'messaging',
+          allow: c.enableWebBrowser !== false ? ['browser', 'web_search', 'web_fetch'] : undefined
         },
         gateway: {
           mode: 'local',
@@ -1420,6 +1602,24 @@ function setupIPC(): void {
   safeHandle('open-link', async (_e, url: string) => {
     const { shell } = require('electron')
     if (shell) shell.openExternal(url)
+  })
+
+  safeHandle('get-auth-token', async () => {
+    try {
+      const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, ''))
+      return config.gateway?.auth?.token || ''
+    } catch { return '' }
+  })
+
+  safeHandle('verify-local-trust', async (event) => {
+    const sender = event.sender
+    const url = sender.getURL()
+    // Trust requests originating from our own loopback gateway
+    if (url.startsWith('http://127.0.0.1:18789') || url.startsWith('http://localhost:18789')) {
+      addTrace('[auth] Verified local trust for internal dashboard')
+      return true
+    }
+    return false
   })
 
   safeHandle('get-specs', async () => {
@@ -1738,10 +1938,17 @@ const startApp = () => {
   }
 
   app.on('second-instance', () => {
-    addTrace('Second instance detected - focusing existing window')
+    addTrace('Second instance detected - focusing and refreshing existing window')
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.show(); mainWindow.focus()
+      mainWindow.show(); 
+      mainWindow.focus();
+      
+      // Force reload to ensure it picks up any updated token/URL
+      const token = ensureGatewayToken();
+      const newUrl = `${GATEWAY_URL}?token=${token}`;
+      addTrace(`[main-window] Second instance reload: ${newUrl}`);
+      mainWindow.loadURL(newUrl);
     } else if (onboardingWindow && !onboardingWindow.isDestroyed()) {
       if (onboardingWindow.isMinimized()) onboardingWindow.restore()
       onboardingWindow.show(); onboardingWindow.focus()
@@ -1758,6 +1965,11 @@ const startApp = () => {
       app.setAppUserModelId(APP_ID)
       addTrace(`AppUserModelId set to ${APP_ID}`)
     } catch (e) { addTrace(`Warning: Failed to set AppUserModelId: ${e}`) }
+
+    // ─── CLOUD SENTINEL ───
+    if (checkCloudPath()) {
+      showCloudWarning()
+    }
 
     addTrace('Running setupIPC...')
     setupIPC()

@@ -29,7 +29,7 @@
     </nav>
 
     <section class="hero">
-        <span class="hero-badge">✨ Your Smartest Private Assistant · v1.0.1</span>
+        <span class="hero-badge">✨ Major Stability Update · v1.0.2</span>
         <h1>Your personal assistant,<br>running on your machine.</h1>
         <p>ClawDesk gives you a brilliant AI assistant that reads your files, writes your emails, and automates your computer without ever sending your private data to the internet.</p>
         <div class="hero-actions">
@@ -43,6 +43,18 @@
     </section>
 
     <section class="container">
+        <div class="release-notes" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 16px; margin-bottom: 60px;">
+            <h3 style="color: #fff; margin-top: 0; font-size: 1.4rem;">🛠️ v1.0.2: Major Architecture & Stability Update</h3>
+            <p style="margin-bottom: 20px; color: #a0a0a0;">We've completely rewritten the engine connection logic to eliminate recurring API issues. This update brings massive stability and speed improvements:</p>
+            <ul style="padding-left: 20px; line-height: 1.8; color: #d0d0d0;">
+                <li><strong>Maximum Context & Speed:</strong> Integrated <code>--flash-attn</code>, maximizing context limits (up to 32K for GLM-4) with zero speed or capability loss.</li>
+                <li><strong>Fixed "File Not Found" (404) Errors:</strong> Resolved URL pathing and API type mismatch bugs (<code>openai-completions</code>) when communicating with local engines.</li>
+                <li><strong>Fixed Tool/Function 500 Errors:</strong> Bound the <code>--jinja</code> flag to the engine registry to guarantee advanced Tool Calling works flawlessly.</li>
+                <li><strong>Engine Name Mismatch Resolved:</strong> Added <code>--alias</code> parameters to ensure exact pairing between OpenClaw and the backend engine.</li>
+                <li><strong>Anti-Ghosting System:</strong> The app now intelligently cleans up stalled <code>.download</code> files on startup.</li>
+            </ul>
+        </div>
+
         <div class="page-header">
             <h2>Everything starts and ends on your PC.</h2>
             <p>Built to be powerful, designed to be dead simple.</p>

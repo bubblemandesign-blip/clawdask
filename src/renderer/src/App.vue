@@ -410,11 +410,11 @@ async function saveAndStart() {
     const startResult = await api.startApp()
     if (!startResult.success) {
       errorMessage.value = 'Start failed: ' + startResult.error
-      step.value = 'audio'
+      step.value = 'error'
     }
   } catch (err) {
     errorMessage.value = String(err)
-    step.value = 'audio'
+    step.value = 'error'
   }
   isLoading.value = false
 }

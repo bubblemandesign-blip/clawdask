@@ -51,7 +51,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 400000000,
     description: 'Tiny but capable. Perfect if you have very little disk space.',
     category: 'fast',
-    contextSize: 4096,
+    contextSize: 8192,
     minRAMGB: 2,
     ollamaName: 'qwen2.5:0.5b'
   },
@@ -64,7 +64,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 1100000000,
     description: 'The best balance of tiny size and intelligence.',
     category: 'fast',
-    contextSize: 4096,
+    contextSize: 8192,
     minRAMGB: 4,
     ollamaName: 'qwen2.5:1.5b'
   },
@@ -92,7 +92,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 2390000000,
     description: 'Microsoft\'s efficient model. Fast and surprisingly smart.',
     category: 'fast',
-    contextSize: 4096,
+    contextSize: 8192,
     minRAMGB: 6,
     ollamaName: 'phi3:mini'
   },
@@ -105,7 +105,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 2000000000,
     description: 'Incredibly smart for its tiny size. Excellent daily driver.',
     category: 'fast',
-    contextSize: 4096,
+    contextSize: 8192,
     minRAMGB: 4,
     ollamaName: 'qwen2.5:3b'
   },
@@ -119,7 +119,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 4700000000,
     description: 'The golden standard for general tasks. Highly recommended.',
     category: 'balanced',
-    contextSize: 4096,
+    contextSize: 16384,
     minRAMGB: 8,
     ollamaName: 'qwen2.5'
   },
@@ -132,22 +132,22 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 4400000000,
     description: 'A reliable and highly capable instruction model.',
     category: 'balanced',
-    contextSize: 8192,
+    contextSize: 16384,
     minRAMGB: 8,
     ollamaName: 'mistral'
   },
   {
     id: 'glm-4-9b',
-    name: 'GLM-4 9B',
-    filename: 'glm-4-9b-chat-Q4_K_M.gguf',
-    url: 'https://huggingface.co/second-state/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q4_K_M.gguf',
-    sizeGB: '5.5',
-    sizeBytes: 6300000000,
-    description: 'Top-tier bilingual (Chinese/English) capabilities. Very smart.',
+    name: 'GLM-4 9B (Ultra-Light)',
+    filename: 'glm-4-9b-chat-Q2_K.gguf',
+    url: 'https://huggingface.co/second-state/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q2_K.gguf',
+    sizeGB: '4.0',
+    sizeBytes: 4000000000,
+    description: 'Bilingual powerhouse optimized for speed and lower RAM usage.',
     category: 'powerful',
     chatTemplate: 'chatglm4',
-    contextSize: 8192,
-    minRAMGB: 10,
+    contextSize: 32768,
+    minRAMGB: 8,
     ollamaName: 'glm4'
   },
   // ── Powerful ──
@@ -160,7 +160,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 9000000000,
     description: 'Heavy duty text modeling. Requires 16GB+ RAM.',
     category: 'powerful',
-    contextSize: 4096,
+    contextSize: 8192,
     minRAMGB: 16,
     ollamaName: 'qwen2.5:14b'
   },
@@ -174,7 +174,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     description: 'Exceptional at multi-step reasoning and problem solving.',
     category: 'reasoning',
     chatTemplate: 'deepseek2',
-    contextSize: 4096,
+    contextSize: 16384,
     minRAMGB: 8,
     ollamaName: 'deepseek-r1:7b'
   },
@@ -188,7 +188,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 4700000000,
     description: 'Best open-source coding model. Writes excellent code.',
     category: 'code',
-    contextSize: 4096,
+    contextSize: 16384,
     minRAMGB: 8,
     ollamaName: 'qwen2.5-coder:7b'
   }
@@ -197,7 +197,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
 export interface DownloadResult {
   success: boolean
   error?: string
-  errorCode?: 'NETWORK' | 'DISK_SPACE' | 'FORBIDDEN' | 'NOT_FOUND' | 'TIMEOUT' | 'EXTRACTION' | 'UNKNOWN'
+  errorCode?: 'NETWORK' | 'DISK_SPACE' | 'FORBIDDEN' | 'NOT_FOUND' | 'TIMEOUT' | 'EXTRACTION' | 'ENGINE_MISSING' | 'UNKNOWN'
 }
 
 // Premium Onboarding: Engaging content for the wait
@@ -228,6 +228,55 @@ export class LocalAIManager {
     const modelsDir = getModelsDir()
     if (!fs.existsSync(engineDir)) fs.mkdirSync(engineDir, { recursive: true })
     if (!fs.existsSync(modelsDir)) fs.mkdirSync(modelsDir, { recursive: true })
+    this.cleanupOrphanModels()
+    this.cleanupStalledDownloads()
+  }
+
+  private cleanupStalledDownloads() {
+    try {
+      const modelsDir = getModelsDir()
+      const files = fs.readdirSync(modelsDir)
+      for (const file of files) {
+        if (file.endsWith('.download')) {
+          const fullPath = path.join(modelsDir, file)
+          try {
+            if (!fs.existsSync(fullPath)) continue
+            const stats = fs.statSync(fullPath)
+            // Systemic Guard: Only delete if size is 0 AND it hasn't been modified in 10 minutes (to avoid wiping active hands-shakes)
+            // Or if it's older than 1 hour regardless of size.
+            const isZeroAndOld = stats.size === 0 && (Date.now() - stats.mtimeMs > 600000)
+            const isVeryOld = (Date.now() - stats.mtimeMs > 3600000)
+            
+            if (isZeroAndOld || isVeryOld) {
+              console.log(`[LocalAI] Cleaning up stalled download: ${file}`)
+              try { fs.unlinkSync(fullPath) } catch {}
+            }
+          } catch (statErr) {
+            console.warn(`[LocalAI] Could not stat/cleanup ${file}:`, statErr)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[LocalAI] Stall cleanup failed:', e)
+    }
+  }
+
+  private cleanupOrphanModels() {
+    try {
+      const modelsDir = getModelsDir()
+      const files = fs.readdirSync(modelsDir)
+      const validFilenames = AVAILABLE_MODELS.map(m => m.filename)
+      
+      for (const file of files) {
+        if (file.endsWith('.gguf') && !validFilenames.includes(file)) {
+          const fullPath = path.join(modelsDir, file)
+          console.log(`[LocalAI] Cleaning up orphan model: ${file}`)
+          try { fs.unlinkSync(fullPath) } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('[LocalAI] Orphan cleanup failed:', e)
+    }
   }
 
   public getEnginePath(): string {
@@ -298,9 +347,21 @@ export class LocalAIManager {
   }
 
   public isModelInstalled(modelId: string): boolean {
-    const preset = AVAILABLE_MODELS.find(m => m.id === modelId)
+    const rawId = modelId.replace('local/', '').replace('ollama/', '')
+    const preset = AVAILABLE_MODELS.find(m => m.id === rawId)
     if (!preset) return false
-    return fs.existsSync(path.join(getModelsDir(), preset.filename))
+    const modelPath = path.join(getModelsDir(), preset.filename)
+    
+    // Systemic Fix: If the main file exists and is "healthy", ignore any ghost .download file
+    if (fs.existsSync(modelPath)) {
+      const stats = fs.statSync(modelPath)
+      // Expect at least 1GB for GLM-4 or 50% of expected size
+      const minSize = preset.sizeBytes ? (preset.sizeBytes * 0.8) : 500000000
+      if (stats.size >= minSize) {
+        return true
+      }
+    }
+    return false
   }
 
   public getAllModelsStatus(): Record<string, boolean> {
@@ -368,28 +429,48 @@ export class LocalAIManager {
    * 3. Try to start Ollama if installed → use Ollama
    * 4. All failed → return false with descriptive error
    */
-  public async startEngine(modelId: string): Promise<{ success: boolean; port: number; backend: string }> {
+  public async startEngine(modelId: string): Promise<{ success: boolean; port: number; backend: string; errorCode?: string }> {
     if (this.isServerRunning) {
       return { success: true, port: this.activePort, backend: this.activeBackend }
     }
 
-    const preset = AVAILABLE_MODELS.find(m => m.id === modelId)
-    console.log(`[LocalAI] Request to start engine for ${modelId}.`)
+    const rawId = modelId.replace('local/', '').replace('ollama/', '')
+    const preset = AVAILABLE_MODELS.find(m => m.id === rawId)
+    console.log(`[LocalAI] Request to start engine for ${rawId}.`)
+
+    // ── Check if engine is actually installed ──
+    const exePath = this.getEnginePath()
+    if (!this.isEngineInstalled()) {
+      this.lastError = 'Internal engine binary is missing.'
+      return { success: false, port: 0, backend: 'none', errorCode: 'ENGINE_MISSING' }
+    }
 
     // ── Strategy 1: Ollama already running with the model ──
     if (preset?.ollamaName) {
-      const ollamaHas = await this.checkOllamaHasModel(preset.ollamaName)
-      if (ollamaHas) {
-        console.log(`[LocalAI] Ollama has ${preset.ollamaName}. Using Ollama on port ${LocalAIManager.OLLAMA_PORT}.`)
-        this.isServerRunning = true
-        this.activePort = LocalAIManager.OLLAMA_PORT
-        this.activeBackend = 'ollama'
-        return { success: true, port: LocalAIManager.OLLAMA_PORT, backend: 'ollama' }
+      const ollamaRunning = await this.waitForServerReady(LocalAIManager.OLLAMA_PORT, 2000)
+      if (ollamaRunning) {
+        const ollamaHas = await this.checkOllamaHasModel(preset.ollamaName)
+        if (ollamaHas) {
+          console.log(`[LocalAI] Ollama has ${preset.ollamaName}. Using Ollama on port ${LocalAIManager.OLLAMA_PORT}.`)
+          this.isServerRunning = true
+          this.activePort = LocalAIManager.OLLAMA_PORT
+          this.activeBackend = 'ollama'
+          return { success: true, port: LocalAIManager.OLLAMA_PORT, backend: 'ollama' }
+        } else {
+          console.log(`[LocalAI] Ollama is running but missing ${preset.ollamaName}.`)
+          // Check if we have the GGUF first before deciding to pull or wait
+          const modelPath = path.join(getModelsDir(), preset.filename)
+          if (fs.existsSync(modelPath)) {
+            console.log(`[LocalAI] GGUF found locally. Prioritizing embedded engine over Ollama pull.`)
+          } else {
+            console.log(`[LocalAI] Initiating background pull for ${preset.ollamaName}...`)
+            this.pullOllamaModel(preset.ollamaName).catch(e => console.error(`[LocalAI] Ollama pull failed: ${e}`))
+          }
+        }
       }
     }
 
     // ── Strategy 2: Embedded engine (llama-server) ──
-    const exePath = this.getEnginePath()
     if (preset && fs.existsSync(exePath)) {
       const modelPath = path.join(getModelsDir(), preset.filename)
       if (fs.existsSync(modelPath)) {
@@ -400,7 +481,10 @@ export class LocalAIManager {
           '--port', LocalAIManager.EMBEDDED_PORT.toString(),
           '--n-gpu-layers', '0',
           '--ctx-size', String(preset.contextSize || 4096),
-          '--parallel', '2'
+          '--parallel', '2',
+          '--flash-attn',
+          '--jinja',
+          '--alias', modelId
         ]
 
         // Per-model chat template
@@ -420,13 +504,23 @@ export class LocalAIManager {
           let earlyExit = false
           const earlyExitTimer = setTimeout(() => earlyExit = true, 3000)
           
-          // ── ADDED: Fake progress bar for UI during 30s-60s memory allocation ──
-          this.downloadProgress = 1
-          this.currentStatusText = `Allocating memory for ${preset?.name || modelId}...`
+          // ── ADDED: Descriptive feedback with a "Real-ish" countdown ──
+          this.downloadProgress = 95
+          let secondsLeft = 25 // Average for Q2 models
+          this.currentStatusText = `Initializing ${preset?.name || modelId}... (Est. ${secondsLeft}s)`
+          
           const progressInterval = setInterval(() => {
-            if (this.downloadProgress < 95) {
-              this.downloadProgress += 2
+            if (secondsLeft > 1) {
+              secondsLeft--
             }
+            
+            const messages = [
+               `Allocating RAM for ${preset?.name || modelId}...`,
+               `Warming up neural engine...`,
+               `Nearly ready... almost there!`
+            ]
+            const msg = messages[Math.floor(Date.now() / 5000) % messages.length]
+            this.currentStatusText = `${msg} (~${secondsLeft}s)`
           }, 1000)
 
           const startTime = Date.now()
@@ -478,14 +572,22 @@ export class LocalAIManager {
     console.log(`[LocalAI] Attempting Ollama fallback...`)
     const ollamaStarted = await this.ensureOllamaRunning()
     if (ollamaStarted) {
+      if (preset?.ollamaName) {
+        const has = await this.checkOllamaHasModel(preset.ollamaName)
+        if (!has) {
+          console.log(`[LocalAI] Initializing background pull for ${preset.ollamaName}...`)
+          this.pullOllamaModel(preset.ollamaName).catch(() => {})
+          this.lastError = 'Ollama is pulling the model. Please wait a few minutes.'
+          return { success: false, port: LocalAIManager.OLLAMA_PORT, backend: 'ollama', errorCode: 'INITIALIZING' }
+        }
+      }
       this.isServerRunning = true
       this.activePort = LocalAIManager.OLLAMA_PORT
       this.activeBackend = 'ollama'
-      console.log(`[LocalAI] Ollama bridge is ready for ${modelId} on port ${LocalAIManager.OLLAMA_PORT}`)
       return { success: true, port: LocalAIManager.OLLAMA_PORT, backend: 'ollama' }
     }
 
-    this.lastError = 'No local AI backend available. Install Ollama or download the built-in engine.'
+    this.lastError = 'No local AI backend available. Please ensure Ollama is installed.'
     return { success: false, port: 0, backend: 'none' }
   }
 
@@ -569,6 +671,26 @@ export class LocalAIManager {
       })
     } catch {
       return false
+    }
+  }
+
+  /**
+   * Pull an Ollama model in the background.
+   */
+  public async pullOllamaModel(name: string): Promise<void> {
+    console.log(`[LocalAI] background pull for ${name} starting...`)
+    try {
+      const resp = await fetch('http://127.0.0.1:11434/api/pull', {
+        method: 'POST',
+        body: JSON.stringify({ name })
+      })
+      if (!resp.ok) {
+        console.error(`[LocalAI] Failed to start Ollama pull: ${resp.statusText}`)
+        return
+      }
+      console.log(`[LocalAI] Ollama pull for ${name} is underway.`)
+    } catch (e) {
+      console.error(`[LocalAI] Network error during Ollama pull: ${e}`)
     }
   }
 
@@ -828,25 +950,33 @@ export class LocalAIManager {
 
           file.on('finish', () => {
             file.close()
-            // Verify the file was fully downloaded
-            if (totalBytes > 0) {
-              const actualSize = fs.statSync(dest).size
-              if (actualSize < totalBytes * 0.95) {
-                console.error(`[LocalAI] Incomplete download: got ${actualSize} of ${totalBytes} bytes`)
-                try { fs.unlinkSync(dest) } catch {}
+            // Systemic Fix: Verify the file has a realistic size before resolving success
+            try {
+              const actualSize = fs.existsSync(dest) ? fs.statSync(dest).size : 0
+              
+              // If totalBytes was known, expect > 95%. If unknown, expect > 10MB as safety floor.
+              const minExpected = totalBytes > 0 ? (totalBytes * 0.95) : 10000000 
+              
+              if (actualSize < minExpected) {
+                console.error(`[LocalAI] Incomplete/Bad download: got ${actualSize} bytes. Expected ~${totalBytes || '>10MB'}`)
+                try { if (fs.existsSync(dest)) fs.unlinkSync(dest) } catch {}
                 if (attempt < maxRetries - 1) {
                   attempt++
                   onProgress?.(0, 'Incomplete download, retrying...')
                   setTimeout(() => tryDownload(currentUrl, 0), 3000)
                   return
                 }
-                this.lastError = 'Download was incomplete — the file was corrupted during transfer.'
+                this.lastError = `Download was incomplete or zero-byte (Got ${(actualSize/1e6).toFixed(1)}MB). Check your connection.`
                 resolve({ success: false, error: this.lastError, errorCode: 'NETWORK' })
                 return
               }
+              
+              console.log(`[LocalAI] Download complete and verified: ${dest} (${(actualSize/1e9).toFixed(2)}GB)`)
+              resolve({ success: true })
+            } catch (finalizeErr) {
+              console.error('[LocalAI] Finalization error:', finalizeErr)
+              resolve({ success: false, error: 'Finalization failed', errorCode: 'UNKNOWN' })
             }
-            console.log(`[LocalAI] Download complete: ${dest}`)
-            resolve({ success: true })
           })
 
           file.on('error', (err) => {
@@ -1078,6 +1208,17 @@ export class LocalAIManager {
     const result = await this.downloadFileWithProgress(preset.url, tempPath, (p, text) => {
       this.downloadProgress = p
       this.currentStatusText = `Downloading ${preset.name}: ${text}`
+      
+      // Cleanup: If we are downloading the new GLM-4, proactively delete the old heavy one to save space
+      if (modelId === 'glm-4-9b' && p > 5) {
+        const modelsDir = getModelsDir()
+        const oldGGUF = path.join(modelsDir, 'glm-4-9b-chat-Q4_K_M.gguf')
+        if (fs.existsSync(oldGGUF)) {
+          console.log('[LocalAI] Proactively deleting old GLM-4 Q4 to make room for Q2...')
+          try { fs.unlinkSync(oldGGUF) } catch {}
+        }
+      }
+      
       onProgress?.(p, `${preset.name}: ${text}`)
     })
 

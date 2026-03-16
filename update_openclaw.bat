@@ -1,6 +1,6 @@
 @echo off
 setlocal
-echo [ClawDesk] Updating OpenClaw Kernel to v2026.3.8...
+echo [ClawDesk] Updating OpenClaw Kernel to v2026.3.13...
 
 :: Ensure we are in the project root
 cd /d "%~dp0"
@@ -9,7 +9,7 @@ cd /d "%~dp0"
 :: call npm cache clean --force
 
 echo [1/3] Updating package.json...
-call npm install openclaw@2026.3.8 --save-exact
+call npm install openclaw@2026.3.13 --save-exact
 
 echo [2/3] Rebuilding Electron dependencies...
 call npm install
