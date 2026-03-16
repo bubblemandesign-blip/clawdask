@@ -51,7 +51,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 400000000,
     description: 'Tiny but capable. Perfect if you have very little disk space.',
     category: 'fast',
-    contextSize: 8192,
+    contextSize: 4096,
     minRAMGB: 2,
     ollamaName: 'qwen2.5:0.5b'
   },
@@ -64,7 +64,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 1100000000,
     description: 'The best balance of tiny size and intelligence.',
     category: 'fast',
-    contextSize: 8192,
+    contextSize: 4096,
     minRAMGB: 4,
     ollamaName: 'qwen2.5:1.5b'
   },
@@ -92,7 +92,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 2390000000,
     description: 'Microsoft\'s efficient model. Fast and surprisingly smart.',
     category: 'fast',
-    contextSize: 8192,
+    contextSize: 4096,
     minRAMGB: 6,
     ollamaName: 'phi3:mini'
   },
@@ -105,7 +105,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 2000000000,
     description: 'Incredibly smart for its tiny size. Excellent daily driver.',
     category: 'fast',
-    contextSize: 8192,
+    contextSize: 4096,
     minRAMGB: 4,
     ollamaName: 'qwen2.5:3b'
   },
@@ -119,7 +119,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 4700000000,
     description: 'The golden standard for general tasks. Highly recommended.',
     category: 'balanced',
-    contextSize: 16384,
+    contextSize: 4096,
     minRAMGB: 8,
     ollamaName: 'qwen2.5'
   },
@@ -132,7 +132,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 4400000000,
     description: 'A reliable and highly capable instruction model.',
     category: 'balanced',
-    contextSize: 16384,
+    contextSize: 8192,
     minRAMGB: 8,
     ollamaName: 'mistral'
   },
@@ -146,7 +146,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     description: 'Bilingual powerhouse optimized for speed and lower RAM usage.',
     category: 'powerful',
     chatTemplate: 'chatglm4',
-    contextSize: 32768,
+    contextSize: 8192,
     minRAMGB: 8,
     ollamaName: 'glm4'
   },
@@ -160,7 +160,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 9000000000,
     description: 'Heavy duty text modeling. Requires 16GB+ RAM.',
     category: 'powerful',
-    contextSize: 8192,
+    contextSize: 4096,
     minRAMGB: 16,
     ollamaName: 'qwen2.5:14b'
   },
@@ -174,7 +174,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     description: 'Exceptional at multi-step reasoning and problem solving.',
     category: 'reasoning',
     chatTemplate: 'deepseek2',
-    contextSize: 16384,
+    contextSize: 4096,
     minRAMGB: 8,
     ollamaName: 'deepseek-r1:7b'
   },
@@ -188,7 +188,7 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     sizeBytes: 4700000000,
     description: 'Best open-source coding model. Writes excellent code.',
     category: 'code',
-    contextSize: 16384,
+    contextSize: 4096,
     minRAMGB: 8,
     ollamaName: 'qwen2.5-coder:7b'
   }
@@ -482,7 +482,6 @@ export class LocalAIManager {
           '--n-gpu-layers', '0',
           '--ctx-size', String(preset.contextSize || 4096),
           '--parallel', '2',
-          '--flash-attn',
           '--jinja',
           '--alias', modelId
         ]

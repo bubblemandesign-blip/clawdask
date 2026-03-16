@@ -362,8 +362,9 @@ class GatewayManager {
           config.models.providers.local = {
             ...(config.models.providers.local || {}),
             apiKey: 'local-embedded',
-            api: 'openai-responses',
+            api: 'openai-completions',
             baseUrl: 'http://127.0.0.1:11434/v1',
+            timeoutMs: 300000,
             models: AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name }))
           }
           changed = true
@@ -492,6 +493,7 @@ class GatewayManager {
           
           if (cfg.models.providers.local) {
             cfg.models.providers.local.baseUrl = `http://127.0.0.1:${result.port}/v1`
+            cfg.models.providers.local.timeoutMs = 300000
             // Systemic Fix: Populate the registry so gateway doesn't 404 early
             cfg.models.providers.local.models = AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name }))
             
