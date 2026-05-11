@@ -1086,6 +1086,7 @@ function createOnboardingWindow(): void {
     addTrace('Initializing BrowserWindow for onboarding...')
     onboardingWindow = new BrowserWindow({
       width: 520, height: 620, frame: false, resizable: false, transparent: true,
+      icon: join(__dirname, '../../resources/icon.png'),
       webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
     })
     addTrace('BrowserWindow created.')
@@ -1387,7 +1388,7 @@ function createMainWindow(): void {
               const brandContainer = document.createElement('div');
               brandContainer.style.cssText = 'display:flex;align-items:center;gap:8px;';
               const brandIcon = document.createElement('div');
-              brandIcon.innerHTML = '<svg width="24" height="24" viewBox="0 0 40 40" fill="none"><path d="M8 28 L14 12 L20 22 L26 12 L32 28" stroke="#f97316" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="32" r="2" fill="#f97316" opacity=".3"/></svg>';
+              brandIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="24" height="24"><rect x="10" y="10" width="12" height="12" rx="2" fill="#7c2d12"/><rect x="10" y="22" width="12" height="12" rx="2" fill="#c2410c"/><rect x="22" y="22" width="12" height="12" rx="2" fill="#f97316"/><rect x="10" y="34" width="12" height="12" rx="2" fill="#c2410c"/><rect x="22" y="34" width="12" height="12" rx="2" fill="#f97316"/><rect x="34" y="34" width="12" height="12" rx="2" fill="#fb923c"/><rect x="10" y="46" width="12" height="12" rx="2" fill="#7c2d12"/><rect x="22" y="46" width="12" height="12" rx="2" fill="#c2410c"/><rect x="34" y="46" width="12" height="12" rx="2" fill="#f97316"/><rect x="106" y="10" width="12" height="12" rx="2" fill="#7c2d12"/><rect x="106" y="22" width="12" height="12" rx="2" fill="#c2410c"/><rect x="94" y="22" width="12" height="12" rx="2" fill="#f97316"/><rect x="106" y="34" width="12" height="12" rx="2" fill="#c2410c"/><rect x="94" y="34" width="12" height="12" rx="2" fill="#f97316"/><rect x="82" y="34" width="12" height="12" rx="2" fill="#fb923c"/><rect x="106" y="46" width="12" height="12" rx="2" fill="#7c2d12"/><rect x="94" y="46" width="12" height="12" rx="2" fill="#c2410c"/><rect x="82" y="46" width="12" height="12" rx="2" fill="#f97316"/><rect x="34" y="58" width="12" height="12" rx="2" fill="#c2410c"/><rect x="46" y="58" width="12" height="12" rx="2" fill="#f97316"/><rect x="82" y="58" width="12" height="12" rx="2" fill="#c2410c"/><rect x="70" y="58" width="12" height="12" rx="2" fill="#f97316"/><rect x="34" y="70" width="60" height="16" rx="3" fill="#f97316"/><rect x="38" y="72" width="52" height="4" rx="2" fill="#fb923c" opacity="0.6"/><rect x="40" y="86" width="48" height="14" rx="3" fill="#c2410c"/><rect x="48" y="100" width="32" height="12" rx="3" fill="#7c2d12"/><rect x="56" y="112" width="16" height="8" rx="3" fill="#431407"/><rect x="12" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/><rect x="108" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/></svg>';
               const brandText = document.createElement('span');
               brandText.textContent = 'ClawdAsk';
               brandText.style.cssText = 'font-weight:700;font-size:18px;letter-spacing:-0.5px;color:#fff;font-family:\"Inter\",sans-serif;margin-left:4px;';

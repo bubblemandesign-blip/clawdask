@@ -133,9 +133,36 @@ onMounted(async () => {
 
       <!-- LOGO HEADER -->
       <div class="app-header">
-        <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
-          <path d="M6 24 L10 8 L16 18 L22 8 L26 24" stroke="#f97316" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="16" cy="27" r="1.5" fill="#f97316" opacity="0.5"/>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="24" height="24">
+          <rect x="10" y="10" width="12" height="12" rx="2" fill="#7c2d12"/>
+          <rect x="10" y="22" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="22" y="22" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="10" y="34" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="22" y="34" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="34" y="34" width="12" height="12" rx="2" fill="#fb923c"/>
+          <rect x="10" y="46" width="12" height="12" rx="2" fill="#7c2d12"/>
+          <rect x="22" y="46" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="34" y="46" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="106" y="10" width="12" height="12" rx="2" fill="#7c2d12"/>
+          <rect x="106" y="22" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="94" y="22" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="106" y="34" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="94" y="34" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="82" y="34" width="12" height="12" rx="2" fill="#fb923c"/>
+          <rect x="106" y="46" width="12" height="12" rx="2" fill="#7c2d12"/>
+          <rect x="94" y="46" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="82" y="46" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="34" y="58" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="46" y="58" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="82" y="58" width="12" height="12" rx="2" fill="#c2410c"/>
+          <rect x="70" y="58" width="12" height="12" rx="2" fill="#f97316"/>
+          <rect x="34" y="70" width="60" height="16" rx="3" fill="#f97316"/>
+          <rect x="38" y="72" width="52" height="4" rx="2" fill="#fb923c" opacity="0.6"/>
+          <rect x="40" y="86" width="48" height="14" rx="3" fill="#c2410c"/>
+          <rect x="48" y="100" width="32" height="12" rx="3" fill="#7c2d12"/>
+          <rect x="56" y="112" width="16" height="8" rx="3" fill="#431407"/>
+          <rect x="12" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/>
+          <rect x="108" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/>
         </svg>
         <span class="app-brand">ClawdAsk</span>
       </div>
@@ -143,20 +170,36 @@ onMounted(async () => {
       <!-- WELCOME -->
       <div v-if="step === 'welcome'" class="step-box center-step">
         <div class="hero-claw">
-          <svg width="80" height="80" viewBox="0 0 64 64" fill="none">
-            <rect x="8" y="8" width="8" height="8" fill="#c2410c" rx="1"/>
-            <rect x="8" y="16" width="8" height="8" fill="#f97316" rx="1"/>
-            <rect x="16" y="16" width="8" height="8" fill="#fb923c" rx="1"/>
-            <rect x="8" y="24" width="8" height="8" fill="#c2410c" rx="1"/>
-            <rect x="16" y="24" width="8" height="8" fill="#f97316" rx="1"/>
-            <rect x="48" y="8" width="8" height="8" fill="#c2410c" rx="1"/>
-            <rect x="48" y="16" width="8" height="8" fill="#f97316" rx="1"/>
-            <rect x="40" y="16" width="8" height="8" fill="#fb923c" rx="1"/>
-            <rect x="48" y="24" width="8" height="8" fill="#c2410c" rx="1"/>
-            <rect x="40" y="24" width="8" height="8" fill="#f97316" rx="1"/>
-            <rect x="16" y="32" width="32" height="8" fill="#f97316" rx="1"/>
-            <rect x="20" y="40" width="24" height="8" fill="#c2410c" rx="1"/>
-            <rect x="24" y="48" width="16" height="8" fill="#7c2d12" rx="1"/>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="80" height="80" style="filter: drop-shadow(0 10px 20px rgba(249,115,22,0.2));">
+            <rect x="10" y="10" width="12" height="12" rx="2" fill="#7c2d12"/>
+            <rect x="10" y="22" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="22" y="22" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="10" y="34" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="22" y="34" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="34" y="34" width="12" height="12" rx="2" fill="#fb923c"/>
+            <rect x="10" y="46" width="12" height="12" rx="2" fill="#7c2d12"/>
+            <rect x="22" y="46" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="34" y="46" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="106" y="10" width="12" height="12" rx="2" fill="#7c2d12"/>
+            <rect x="106" y="22" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="94" y="22" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="106" y="34" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="94" y="34" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="82" y="34" width="12" height="12" rx="2" fill="#fb923c"/>
+            <rect x="106" y="46" width="12" height="12" rx="2" fill="#7c2d12"/>
+            <rect x="94" y="46" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="82" y="46" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="34" y="58" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="46" y="58" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="82" y="58" width="12" height="12" rx="2" fill="#c2410c"/>
+            <rect x="70" y="58" width="12" height="12" rx="2" fill="#f97316"/>
+            <rect x="34" y="70" width="60" height="16" rx="3" fill="#f97316"/>
+            <rect x="38" y="72" width="52" height="4" rx="2" fill="#fb923c" opacity="0.6"/>
+            <rect x="40" y="86" width="48" height="14" rx="3" fill="#c2410c"/>
+            <rect x="48" y="100" width="32" height="12" rx="3" fill="#7c2d12"/>
+            <rect x="56" y="112" width="16" height="8" rx="3" fill="#431407"/>
+            <rect x="12" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/>
+            <rect x="108" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/>
           </svg>
         </div>
         <h1 class="welcome-title">Your Digital Employee</h1>
@@ -336,28 +379,42 @@ body { background: #000; color: #ededed; font-family: 'Inter', sans-serif; -webk
 .app-shell {
   width: 100vw; height: 100vh;
   display: flex; align-items: center; justify-content: center;
-  background: #000;
+  background: #020202; /* Deepest black */
   -webkit-app-region: drag;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Minimalist Vignette Overlay */
+.app-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.8) 100%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .app-card {
   width: 460px;
-  background: #080808;
-  border: 1px solid #1a1a1a;
-  border-radius: 14px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(249,115,22,0.04);
+  background: rgba(5, 5, 5, 0.95);
+  border: 1px solid rgba(249,115,22,0.15);
+  border-radius: 8px; /* Sharper corners for that robot/tech feel */
+  box-shadow: 0 30px 60px rgba(0,0,0,0.8);
   overflow: hidden;
   -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 10;
 }
 
 /* ── Header ── */
 .app-header {
   display: flex; align-items: center; gap: 8px;
   padding: 18px 28px;
-  border-bottom: 1px solid #111;
-  background: #050505;
+  border-bottom: 1px solid rgba(249,115,22,0.15);
+  background: rgba(5,5,5,0.9);
 }
-.app-brand { font-size: 15px; font-weight: 700; letter-spacing: -0.03em; }
+.app-brand { font-size: 15px; font-weight: 700; letter-spacing: -0.03em; text-transform: uppercase; text-shadow: 0 0 10px rgba(249,115,22,0.5); }
 
 /* ── Step containers ── */
 .step-box { padding: 32px 28px; animation: fadein 0.2s ease; }
@@ -377,15 +434,21 @@ body { background: #000; color: #ededed; font-family: 'Inter', sans-serif; -webk
 /* ── Buttons ── */
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 11px 20px; border-radius: 8px;
-  background: #f97316; color: #fff;
-  font-size: 13px; font-weight: 600; font-family: inherit;
-  border: none; cursor: pointer;
+  padding: 12px 20px; border-radius: 4px; /* Sharper corners */
+  background: transparent;
+  color: #f97316;
+  font-size: 12px; font-weight: 500; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 2px;
+  border: 1px solid rgba(249,115,22,0.5); cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 0 16px rgba(249,115,22,0.15);
+  position: relative;
+  overflow: hidden;
 }
-.btn-primary:hover { background: #fb923c; transform: translateY(-1px); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-primary:hover { 
+  background: rgba(249, 115, 22, 0.05); 
+  border-color: #f97316;
+  box-shadow: 0 0 10px rgba(249,115,22,0.2); 
+}
+.btn-primary:disabled { opacity: 0.3; cursor: not-allowed; border-color: #333; color: #555; box-shadow: none; }
 
 .btn-ghost {
   display: inline-flex; align-items: center; justify-content: center;
