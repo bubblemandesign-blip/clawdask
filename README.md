@@ -1,4 +1,4 @@
-# clawdesk
+# orrery
 
 An Electron application with Vue and TypeScript
 

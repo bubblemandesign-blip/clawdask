@@ -1,6 +1,6 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 
-interface ClawDeskAPI {
+interface ORRERYAPI {
   saveConfig: (config: { provider: string; apiKey: string }) => Promise<{ success: boolean; error?: string }>
   startApp: () => Promise<{ success: boolean; error?: string }>
   checkOpenClaw: () => Promise<{ installed: boolean; path: string | null }>
@@ -10,6 +10,6 @@ interface ClawDeskAPI {
 declare global {
   interface Window {
     electron: ElectronAPI
-    api: ClawDeskAPI
+    api: ORRERYAPI
   }
 }

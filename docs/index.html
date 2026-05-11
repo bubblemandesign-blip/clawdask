@@ -3,104 +3,241 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClawDesk — AI Empowerment, Zero Effort</title>
-    <meta name="description" content="Download ClawDesk. Install once, run your personal AI assistant locally. Supports OpenAI, Claude, Local Models, and Automation.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>ClawdAsk — Your Digital Employee</title>
+    <meta name="description" content="ClawdAsk is an autonomous digital employee that controls your computer to complete real tasks. Download once, deploy forever.">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <nav>
-        <a href="index.html" class="nav-brand">
-            <svg viewBox="0 0 40 40" fill="none">
-                <path d="M8 28 L14 12 L20 22 L26 12 L32 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-                <circle cx="20" cy="32" r="2" fill="#fff" opacity=".3" />
-            </svg>
-            ClawDesk
-        </a>
-        <div class="nav-links">
-            <a href="index.html" class="active">Home</a>
-            <a href="about.html">About & vs ChatGPT</a>
-            <a href="how-it-works.html">How it Works</a>
-            <a href="use-cases.html">336 Ways to Use</a>
-            <a href="risks.html">Security & Risks</a>
-            <a href="https://github.com/clawdesk/clawdesk/releases" class="btn-nav">Download</a>
+
+    <!-- PARTICLES -->
+    <div class="particles-bg" id="particles"></div>
+
+    <!-- NAV -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a href="index.html" class="nav-brand">
+                <span class="claw-icon"><svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M6 24 L10 8 L16 18 L22 8 L26 24" stroke="#f97316" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="27" r="1.5" fill="#f97316" opacity="0.4"/></svg></span>
+                ClawdAsk
+            </a>
+            <div class="nav-links">
+                <a href="index.html" class="active">Home</a>
+                <a href="capabilities.html">Capabilities</a>
+                <a href="download.html">Download</a>
+                <a href="download.html" class="btn btn-primary btn-sm">Get ClawdAsk</a>
+            </div>
         </div>
     </nav>
 
+    <!-- HERO -->
     <section class="hero">
-        <span class="hero-badge">✨ Major Stability Update · v1.0.2</span>
-        <h1>Your personal assistant,<br>running on your machine.</h1>
-        <p>ClawDesk gives you a brilliant AI assistant that reads your files, writes your emails, and automates your computer without ever sending your private data to the internet.</p>
-        <div class="hero-actions">
-            <a href="https://gofile.io/d/rCEAYH" class="btn btn-primary" target="_blank">
-                Download Now (Works Offline)
-            </a>
-            <a href="about.html" class="btn btn-secondary">
-                See how it beats ChatGPT
-            </a>
-        </div>
-    </section>
-
-    <section class="container">
-        <div class="release-notes" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 16px; margin-bottom: 60px;">
-            <h3 style="color: #fff; margin-top: 0; font-size: 1.4rem;">🛠️ v1.0.2: Major Architecture & Stability Update</h3>
-            <p style="margin-bottom: 20px; color: #a0a0a0;">We've completely rewritten the engine connection logic to eliminate recurring API issues. This update brings massive stability and speed improvements:</p>
-            <ul style="padding-left: 20px; line-height: 1.8; color: #d0d0d0;">
-                <li><strong>Maximum Context & Speed:</strong> Integrated <code>--flash-attn</code>, maximizing context limits (up to 32K for GLM-4) with zero speed or capability loss.</li>
-                <li><strong>Fixed "File Not Found" (404) Errors:</strong> Resolved URL pathing and API type mismatch bugs (<code>openai-completions</code>) when communicating with local engines.</li>
-                <li><strong>Fixed Tool/Function 500 Errors:</strong> Bound the <code>--jinja</code> flag to the engine registry to guarantee advanced Tool Calling works flawlessly.</li>
-                <li><strong>Engine Name Mismatch Resolved:</strong> Added <code>--alias</code> parameters to ensure exact pairing between OpenClaw and the backend engine.</li>
-                <li><strong>Anti-Ghosting System:</strong> The app now intelligently cleans up stalled <code>.download</code> files on startup.</li>
-            </ul>
-        </div>
-
-        <div class="page-header">
-            <h2>Everything starts and ends on your PC.</h2>
-            <p>Built to be powerful, designed to be dead simple.</p>
-        </div>
-
-        <div class="grid-3">
-            <div class="card">
-                <div class="card-icon">⚡</div>
-                <h3>Ready in One Click</h3>
-                <p>No coding or long setups. Just press download and ClawDesk works immediately. It automatically handles the heavy lifting in the background.</p>
-            </div>
-            
-            <div class="card">
-                <div class="card-icon">📝</div>
-                <h3>Reads All Your Files</h3>
-                <p>Drag and drop massive PDFs, Excel sheets, and Word documents. It reads them instantly on your own computer.</p>
+        <div class="hero-content">
+            <div class="hero-tagline">
+                <span class="dot"></span>
+                AUTONOMOUS DIGITAL EMPLOYEE &mdash; POWERED BY OPENCLAW
             </div>
 
-            <div class="card">
-                <div class="card-icon">🔒</div>
-                <h3>100% Private</h3>
-                <p>Your chats belong to you. Nothing is ever uploaded to a cloud server unless you explicitly tell it to use a cloud service.</p>
+            <!-- 3D PIXEL CRAB CLAW -->
+            <div class="claw-3d-container">
+                <img src="favicon.svg" alt="ClawdAsk Logo" class="claw-3d" style="width: 100%; height: 100%; filter: drop-shadow(0px 10px 20px rgba(249,115,22,0.2));">
+                <div class="claw-shadow"></div>
             </div>
 
-            <div class="card">
-                <div class="card-icon">🧠</div>
-                <h3>The Best AI Brains</h3>
-                <p>Use the smartest AI on the planet (like Claude 3.7 or ChatGPT) when you need to, or stay completely offline with powerful free local AI.</p>
-            </div>
+            <h1>Your <span class="accent">Jarvis.</span><br>One click away.</h1>
+            <p class="hero-desc">An autonomous agent that takes over your mouse and keyboard to build websites, manage files, browse the web, and complete any task you assign — all running privately on your machine.</p>
 
-            <div class="card">
-                <div class="card-icon">🛠️</div>
-                <h3>Smart Hardware Detection</h3>
-                <p>ClawDesk looks at your computer's power and automatically picks the best AI that won't slow down your laptop.</p>
+            <div class="hero-actions">
+                <a href="download.html" class="btn btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zM2 14h12v-1H2v1z"/></svg>
+                    Download for Windows — Free
+                </a>
+                <a href="capabilities.html" class="btn btn-ghost">See what it can do &rarr;</a>
             </div>
+            <div class="hero-meta">Windows 10/11 &middot; v1.0.0 &middot; 180 MB &middot; No account needed</div>
 
-            <div class="card">
-                <div class="card-icon">💬</div>
-                <h3>Takes Action For You</h3>
-                <p>Unlike ChatGPT which just talks, ClawDesk can actually click, organize your folders, and read your Apple Notes for you automatically.</p>
+            <!-- Stats bar -->
+            <div class="hero-stats">
+                <div class="stat-item"><span class="stat-num">∞</span><span class="stat-label">Local inferences</span></div>
+                <div class="stat-divider"></div>
+                <div class="stat-item"><span class="stat-num">0</span><span class="stat-label">Data sent to cloud</span></div>
+                <div class="stat-divider"></div>
+                <div class="stat-item"><span class="stat-num">1-click</span><span class="stat-label">Install</span></div>
             </div>
         </div>
     </section>
 
-    <footer>
-        <p>ClawDesk is MIT licensed · Powered by the <a href="https://github.com/openclaw/openclaw" target="_blank">OpenClaw Engine</a></p>
+    <!-- FEATURES -->
+    <section class="features-section" id="features">
+        <div class="section-center reveal">
+            <span class="section-label">Capabilities</span>
+            <h2 class="section-title">Everything a real employee does.<br>Without the overhead.</h2>
+            <p class="section-subtitle">ClawdAsk doesn't just answer questions — it takes action. It sees your screen, moves your mouse, types on your keyboard, and completes tasks autonomously.</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card reveal">
+                <div class="feature-icon">🖱️</div>
+                <h3>Computer Control</h3>
+                <p>Full mouse and keyboard autonomy. It clicks buttons, fills forms, drags files, and navigates any application like a real user sitting at your desk.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">🌐</div>
+                <h3>Web Browsing</h3>
+                <p>Researches topics, scrapes data, fills out online forms, manages social media, and navigates complex multi-step web workflows.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">📁</div>
+                <h3>File Management</h3>
+                <p>Creates, edits, organizes, and manages files and folders across your entire system. Write reports, edit spreadsheets, manage codebases.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">💬</div>
+                <h3>Multi-App Messaging</h3>
+                <p>Connects to WhatsApp, Telegram, Discord, and Slack. Respond to messages, schedule meetings, and manage communications on autopilot.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">🧠</div>
+                <h3>Persistent Memory</h3>
+                <p>Remembers your preferences, past tasks, and project context across sessions. It learns how you work and gets better over time.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">⚡</div>
+                <h3>Autonomous Execution</h3>
+                <p>Set tasks and walk away. ClawdAsk runs in the background with a heartbeat scheduler, proactively completing work without constant supervision.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how-section">
+        <div class="section-center reveal">
+            <span class="section-label">How it works</span>
+            <h2 class="section-title">Deploy your digital employee<br>in under 2 minutes.</h2>
+        </div>
+
+        <div class="steps">
+            <div class="step reveal">
+                <div class="step-num">01</div>
+                <h3>Download & Install</h3>
+                <p>One-click installer. No terminal commands, no dependencies, no configuration files to edit.</p>
+            </div>
+            </div>
+            <div class="step reveal">
+                <div class="step-num">02</div>
+                <h3>Choose Your Engine</h3>
+                <p>Run AI locally on your GPU for total privacy, or connect your own cloud API key for maximum power.</p>
+            </div>
+            <div class="step reveal">
+                <div class="step-num">03</div>
+                <h3>Give It Work</h3>
+                <p>Tell it what to do in plain language. It takes control, executes the task, and reports back when done.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <div class="cta-box reveal">
+            <h2>Ready to hire your<br>digital employee?</h2>
+            <p>Download ClawdAsk and start automating real work in minutes. Your computer. Your data. Your rules.</p>
+            <a href="download.html" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zM2 14h12v-1H2v1z"/></svg>
+                Download Now — Free Trial
+            </a>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <span>ClawdAsk © 2026</span>
+            <div class="footer-links">
+                <a href="capabilities.html">Capabilities</a>
+                <a href="download.html">Download</a>
+                <a href="mailto:support@clawdask.app">Support</a>
+            </div>
+        </div>
     </footer>
+
+    <script>
+    // ─── 3D PIXEL CRAB CLAW BUILDER ───
+    (function buildClaw() {
+        const container = document.getElementById('claw3d');
+        if (!container) return;
+
+        // Claw pixel map: [row, col, colorVariant]
+        // 0=dark orange, 1=bright orange, 2=highlight, 3=deep shadow
+        const colors = ['#c2410c', '#f97316', '#fb923c', '#7c2d12'];
+        
+        // LEFT PINCER
+        const leftPincer = [
+            [2,3,1],[2,4,2],[3,2,0],[3,3,1],[3,4,1],[3,5,2],
+            [4,1,0],[4,2,1],[4,3,1],[4,4,2],[5,1,3],[5,2,0],[5,3,1],
+            [6,2,0],[6,3,1],[7,3,0],[7,4,1],[8,4,0],[8,5,1],[9,5,0],[9,6,1]
+        ];
+        
+        // RIGHT PINCER (mirror)
+        const rightPincer = [
+            [2,11,2],[2,12,1],[3,10,2],[3,11,1],[3,12,1],[3,13,0],
+            [4,11,2],[4,12,1],[4,13,1],[4,14,0],[5,12,1],[5,13,0],[5,14,3],
+            [6,12,1],[6,13,0],[7,11,1],[7,12,0],[8,10,1],[8,11,0],[9,9,1],[9,10,0]
+        ];
+        
+        // BODY/JOINT
+        const body = [
+            [10,5,0],[10,6,1],[10,7,1],[10,8,1],[10,9,1],[10,10,0],
+            [11,4,3],[11,5,0],[11,6,1],[11,7,2],[11,8,2],[11,9,1],[11,10,0],[11,11,3],
+            [12,5,0],[12,6,1],[12,7,1],[12,8,1],[12,9,1],[12,10,0],
+            [13,6,3],[13,7,0],[13,8,0],[13,9,3],
+            [14,7,3],[14,8,3]
+        ];
+        
+        const allPixels = [...leftPincer, ...rightPincer, ...body];
+        const size = 16;
+        const offsetX = -8 * size;
+        const offsetY = -8 * size;
+        
+        allPixels.forEach(([row, col, ci]) => {
+            const px = document.createElement('div');
+            px.className = 'px';
+            px.style.cssText = `
+                left: ${col * size + offsetX + 130}px;
+                top: ${row * size + offsetY + 130}px;
+                --px-color: ${colors[ci]};
+            `;
+            container.appendChild(px);
+        });
+    })();
+
+    // ─── SCROLL REVEAL ───
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // ─── PARTICLES ───
+    (function initParticles() {
+        const container = document.getElementById('particles');
+        if (!container) return;
+        for (let i = 0; i < 30; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.cssText = `
+                left: ${Math.random() * 100}%;
+                animation-duration: ${12 + Math.random() * 18}s;
+                animation-delay: ${Math.random() * 10}s;
+                width: ${1 + Math.random() * 2}px;
+                height: ${1 + Math.random() * 2}px;
+            `;
+            container.appendChild(p);
+        }
+    })();
+    </script>
+
 </body>
 </html>

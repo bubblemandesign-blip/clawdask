@@ -1,7 +1,7 @@
-# System Runtime Check for ClawDesk
+# System Runtime Check for ORRERY
 
 echo "======================================"
-echo "   ClawDesk Dependency Sentinel       "
+echo "   ORRERY Dependency Sentinel       "
 echo "======================================"
 echo ""
 
@@ -29,7 +29,7 @@ $port = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
 if ($port) {
     $proc = Get-Process -Id $port.OwningProcess
     echo "  [CONFLICT] Port 8080 is being used by: $($proc.Name) (PID: $($proc.Id))"
-    echo "  ClawDesk will attempt to use an alternate port."
+    echo "  ORRERY will attempt to use an alternate port."
 } else {
     echo "  [OK] Port 8080 is available."
 }

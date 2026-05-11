@@ -1,11 +1,11 @@
-# ClawDesk Ollama Setup & Model Puller
+# ORRERY Ollama Setup & Model Puller
 # This script ensures Ollama is installed, running, and HAS THE REQUIRED MODEL.
 
 $ErrorActionPreference = "Stop"
 
 function Write-Host-Color {
     param($Message, $Color = "White")
-    Write-Host "[ClawDesk] $Message" -ForegroundColor $Color
+    Write-Host "[ORRERY] $Message" -ForegroundColor $Color
 }
 
 Write-Host-Color "Starting Bulletproof AI Engine Setup..." "Cyan"
@@ -88,11 +88,11 @@ Write-Host-Color "Please do not close this window." "Gray"
 & $ollamaPath pull glm4
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host-Color "SUCCESS! AI Engine is ready for ClawDesk." "Green"
+    Write-Host-Color "SUCCESS! AI Engine is ready for ORRERY." "Green"
 } else {
     Write-Host-Color "Model pull failed. Please check your internet connection." "Red"
     exit 1
 }
 
-Write-Host-Color "Setup Complete. You can now close this window and restart ClawDesk." "Cyan"
+Write-Host-Color "Setup Complete. You can now close this window and restart ORRERY." "Cyan"
 pause

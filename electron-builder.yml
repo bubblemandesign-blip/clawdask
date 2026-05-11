@@ -1,5 +1,5 @@
-appId: com.clawdesk.app
-productName: ClawDesk
+appId: com.clawdask.app
+productName: ClawdAsk
 directories:
   buildResources: build
 files:
@@ -28,7 +28,7 @@ asarUnpack:
   - node_modules/@mariozechner/pi-agent-core
   - node_modules/@img/sharp-libvips-win32-x64
 win:
-  executableName: ClawDesk
+  executableName: ClawdAsk
   icon: build/icon.ico
   target:
     - nsis
@@ -41,11 +41,11 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: "ClawDesk"
+  shortcutName: "ClawdAsk"
   runAfterFinish: true
 appx:
-  identityName: ClawDesk
-  publisherDisplayName: ClawDesk
+  identityName: ClawdAsk
+  publisherDisplayName: ClawdAsk
   publisher: "CN=REPLACE_ME_FROM_PARTNER_CENTER"
   setBuildNumber: false
 mac:
@@ -62,12 +62,12 @@ linux:
   target:
     - AppImage
     - deb
-  maintainer: clawdesk
+  maintainer: clawdask
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
   provider: github
-  owner: clawdesk
-  repo: clawdesk
+  owner: bubblemandesign-blip
+  repo: clawdask

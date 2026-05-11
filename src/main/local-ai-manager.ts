@@ -11,14 +11,15 @@ function getEngineDir() {
     return path.join(app.getPath('userData'), 'engine') 
   } catch {
     // Fallback for premature calls (e.g. during static import)
-    return path.join(process.env.APPDATA || '', 'ClawDesk', 'engine')
+    return path.join(process.env.APPDATA || '', 'ClawdAsk', 'engine')
   }
 }
 function getModelsDir() { return path.join(getEngineDir(), 'models') }
 
-// Primary and fallback engine URLs
+// Primary and fallback engine URLs (Added fast mirrors for better global stability)
 const ENGINE_URLS = [
-  'https://github.com/ggml-org/llama.cpp/releases/download/b5604/llama-b5604-bin-win-cpu-x64.zip',
+  'https://mirror.ghproxy.com/https://github.com/ggml-org/llama.cpp/releases/download/b8675/llama-b8675-bin-win-cpu-x64.zip', // Fast Mirror
+  'https://github.com/ggml-org/llama.cpp/releases/download/b8675/llama-b8675-bin-win-cpu-x64.zip', // Direct github
   'https://github.com/ggml-org/llama.cpp/releases/download/b8272/llama-b8272-bin-win-cpu-x64.zip'
 ]
 
@@ -41,7 +42,9 @@ export interface ModelPreset {
 // Models that are 100% open (NO gated/license-acceptance required) and
 // confirmed compatible with llama-server's OpenAI Chat API
 export const AVAILABLE_MODELS: ModelPreset[] = [
-  // ── Ultra-Light (For limited space) ──
+  // ═══════════════════════════════════════════════════════════
+  // ──  ULTRA-LIGHT (0.5B – 1.5B)  ──
+  // ═══════════════════════════════════════════════════════════
   {
     id: 'qwen2.5-0.5b',
     name: 'Qwen 2.5 0.5B',
@@ -68,7 +71,37 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     minRAMGB: 4,
     ollamaName: 'qwen2.5:1.5b'
   },
-  // ── Fast & Light ──
+  {
+    id: 'llama3.2-1b',
+    name: 'Llama 3.2 1B',
+    filename: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+    sizeGB: '0.8',
+    sizeBytes: 800000000,
+    description: 'Meta\'s ultra-light model. Ideal for low-end devices.',
+    category: 'fast',
+    contextSize: 8192,
+    minRAMGB: 2,
+    ollamaName: 'llama3.2:1b'
+  },
+  {
+    id: 'deepseek-r1-1.5b',
+    name: 'DeepSeek R1 1.5B',
+    filename: 'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
+    sizeGB: '1.1',
+    sizeBytes: 1100000000,
+    description: 'Reasoning in a tiny package. Great for logic puzzles.',
+    category: 'reasoning',
+    chatTemplate: 'deepseek2',
+    contextSize: 4096,
+    minRAMGB: 4,
+    ollamaName: 'deepseek-r1:1.5b'
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // ──  FAST & EFFICIENT (2B – 4B)  ──
+  // ═══════════════════════════════════════════════════════════
   {
     id: 'gemma2-2b',
     name: 'Gemma 2 2B',
@@ -82,6 +115,19 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     contextSize: 8192,
     minRAMGB: 4,
     ollamaName: 'gemma2:2b'
+  },
+  {
+    id: 'llama3.2-3b',
+    name: 'Llama 3.2 3B',
+    filename: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+    sizeGB: '2.0',
+    sizeBytes: 2000000000,
+    description: 'Meta\'s fast 3B. Excellent speed-to-quality ratio.',
+    category: 'fast',
+    contextSize: 8192,
+    minRAMGB: 4,
+    ollamaName: 'llama3.2:3b'
   },
   {
     id: 'phi3-mini',
@@ -109,7 +155,10 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     minRAMGB: 4,
     ollamaName: 'qwen2.5:3b'
   },
-  // ── Balanced & Capable ──
+
+  // ═══════════════════════════════════════════════════════════
+  // ──  BALANCED & CAPABLE (7B – 14B)  ──
+  // ═══════════════════════════════════════════════════════════
   {
     id: 'qwen2.5-7b',
     name: 'Qwen 2.5 7B',
@@ -122,6 +171,32 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     contextSize: 4096,
     minRAMGB: 8,
     ollamaName: 'qwen2.5'
+  },
+  {
+    id: 'llama3.1-8b',
+    name: 'Llama 3.1 8B',
+    filename: 'Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
+    sizeGB: '4.9',
+    sizeBytes: 4920000000,
+    description: 'Meta\'s workhorse 8B. Excellent for general tasking.',
+    category: 'balanced',
+    contextSize: 8192,
+    minRAMGB: 8,
+    ollamaName: 'llama3.1:8b'
+  },
+  {
+    id: 'gemma2-9b',
+    name: 'Gemma 2 9B',
+    filename: 'gemma-2-9b-it-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf',
+    sizeGB: '5.8',
+    sizeBytes: 5800000000,
+    description: 'Google\'s mid-range model. Well-rounded and reliable.',
+    category: 'balanced',
+    contextSize: 8192,
+    minRAMGB: 8,
+    ollamaName: 'gemma2:9b'
   },
   {
     id: 'mistral-7b',
@@ -137,33 +212,61 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     ollamaName: 'mistral'
   },
   {
-    id: 'glm-4-9b',
-    name: 'GLM-4 9B (Ultra-Light)',
-    filename: 'glm-4-9b-chat-Q2_K.gguf',
-    url: 'https://huggingface.co/second-state/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q2_K.gguf',
-    sizeGB: '4.0',
-    sizeBytes: 4000000000,
-    description: 'Bilingual powerhouse optimized for speed and lower RAM usage.',
-    category: 'powerful',
-    chatTemplate: 'chatglm4',
+    id: 'mistral-nemo',
+    name: 'Mistral NeMo 12B',
+    filename: 'Mistral-Nemo-Instruct-2407-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF/resolve/main/Mistral-Nemo-Instruct-2407-Q4_K_M.gguf',
+    sizeGB: '7.1',
+    sizeBytes: 7100000000,
+    description: 'Co-designed with Nvidia. Excellent multilingual model.',
+    category: 'balanced',
     contextSize: 8192,
-    minRAMGB: 8,
-    ollamaName: 'glm4'
+    minRAMGB: 12,
+    ollamaName: 'mistral-nemo'
   },
-  // ── Powerful ──
   {
-    id: 'qwen2.5-14b',
-    name: 'Qwen 2.5 14B',
-    filename: 'qwen2.5-14b-instruct-q4_k_m.gguf',
-    url: 'https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf',
-    sizeGB: '9.0',
-    sizeBytes: 9000000000,
-    description: 'Heavy duty text modeling. Requires 16GB+ RAM.',
+    id: 'glm-5-cloud',
+    name: 'GLM 5 (Z.ai Cloud)',
+    filename: 'glm-5-cloud.gguf',
+    url: '',
+    sizeGB: '0.0',
+    sizeBytes: 0,
+    description: 'Cloud version of the powerful GLM-5 model. Runs via Z.ai APIs without using local GPU.',
     category: 'powerful',
-    contextSize: 4096,
-    minRAMGB: 16,
-    ollamaName: 'qwen2.5:14b'
+    contextSize: 128000,
+    minRAMGB: 4,
+    ollamaName: 'glm-5:cloud'
   },
+  {
+    id: 'deepseek-v3',
+    name: 'DeepSeek V3 (Cloud)',
+    filename: 'deepseek-v3-cloud.gguf',
+    url: '',
+    sizeGB: '0.0',
+    sizeBytes: 0,
+    description: 'DeepSeek\'s ultra-powerful V3 model running via Ollama Cloud integration.',
+    category: 'powerful',
+    contextSize: 65536,
+    minRAMGB: 4,
+    ollamaName: 'deepseek-v3'
+  },
+  {
+    id: 'phi4',
+    name: 'Phi-4 14B',
+    filename: 'phi-4-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/phi-4-GGUF/resolve/main/phi-4-Q4_K_M.gguf',
+    sizeGB: '9.1',
+    sizeBytes: 9100000000,
+    description: 'Microsoft\'s latest. Near GPT-4 quality on many benchmarks.',
+    category: 'balanced',
+    contextSize: 16384,
+    minRAMGB: 16,
+    ollamaName: 'phi4'
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // ──  DEEPSEEK R1 REASONING CHAIN  ──
+  // ═══════════════════════════════════════════════════════════
   {
     id: 'deepseek-r1-7b',
     name: 'DeepSeek R1 7B',
@@ -178,7 +281,149 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     minRAMGB: 8,
     ollamaName: 'deepseek-r1:7b'
   },
-  // ── Code ──
+  {
+    id: 'deepseek-r1-8b',
+    name: 'DeepSeek R1 8B (Llama)',
+    filename: 'DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Llama-8B-GGUF/resolve/main/DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf',
+    sizeGB: '4.9',
+    sizeBytes: 4900000000,
+    description: 'Llama-based R1 reasoning. Broad instruction following.',
+    category: 'reasoning',
+    chatTemplate: 'deepseek2',
+    contextSize: 4096,
+    minRAMGB: 8,
+    ollamaName: 'deepseek-r1:8b'
+  },
+  {
+    id: 'deepseek-r1-14b',
+    name: 'DeepSeek R1 14B',
+    filename: 'DeepSeek-R1-Distill-Qwen-14B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-14B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-14B-Q4_K_M.gguf',
+    sizeGB: '9.0',
+    sizeBytes: 9000000000,
+    description: 'Advanced reasoning. Excellent for complex STEM and analysis.',
+    category: 'reasoning',
+    chatTemplate: 'deepseek2',
+    contextSize: 4096,
+    minRAMGB: 16,
+    ollamaName: 'deepseek-r1:14b'
+  },
+  {
+    id: 'deepseek-r1-32b',
+    name: 'DeepSeek R1 32B',
+    filename: 'DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf',
+    sizeGB: '19.0',
+    sizeBytes: 19000000000,
+    description: 'Pro-tier reasoning. Rivals GPT-4 on logic puzzles.',
+    category: 'reasoning',
+    chatTemplate: 'deepseek2',
+    contextSize: 4096,
+    minRAMGB: 32,
+    ollamaName: 'deepseek-r1:32b'
+  },
+  {
+    id: 'deepseek-r1-70b',
+    name: 'DeepSeek R1 70B',
+    filename: 'DeepSeek-R1-Distill-Llama-70B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Llama-70B-GGUF/resolve/main/DeepSeek-R1-Distill-Llama-70B-Q4_K_M.gguf',
+    sizeGB: '43.0',
+    sizeBytes: 43000000000,
+    description: 'God-tier reasoning. Requires 64GB+ RAM. The ultimate local brain.',
+    category: 'reasoning',
+    chatTemplate: 'deepseek2',
+    contextSize: 4096,
+    minRAMGB: 64,
+    ollamaName: 'deepseek-r1:70b'
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // ──  POWERFUL & HEAVYWEIGHT (14B+)  ──
+  // ═══════════════════════════════════════════════════════════
+  {
+    id: 'qwen2.5-14b',
+    name: 'Qwen 2.5 14B',
+    filename: 'qwen2.5-14b-instruct-q4_k_m.gguf',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf',
+    sizeGB: '9.0',
+    sizeBytes: 9000000000,
+    description: 'Heavy duty text modeling. Requires 16GB+ RAM.',
+    category: 'powerful',
+    contextSize: 4096,
+    minRAMGB: 16,
+    ollamaName: 'qwen2.5:14b'
+  },
+  {
+    id: 'qwen2.5-72b',
+    name: 'Qwen 2.5 72B',
+    filename: 'qwen2.5-72b-instruct-q4_k_m.gguf',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-72B-Instruct-GGUF/resolve/main/qwen2.5-72b-instruct-q4_k_m.gguf',
+    sizeGB: '47.0',
+    sizeBytes: 47000000000,
+    description: 'Alibaba\'s flagship. Top-tier multilingual intelligence.',
+    category: 'powerful',
+    contextSize: 4096,
+    minRAMGB: 64,
+    ollamaName: 'qwen2.5:72b'
+  },
+  {
+    id: 'llama3.3',
+    name: 'Llama 3.3 70B',
+    filename: 'Llama-3.3-70B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Llama-3.3-70B-Instruct-GGUF/resolve/main/Llama-3.3-70B-Instruct-Q4_K_M.gguf',
+    sizeGB: '42.0',
+    sizeBytes: 42000000000,
+    description: 'Meta\'s best open model. State of the art performance.',
+    category: 'powerful',
+    contextSize: 8192,
+    minRAMGB: 64,
+    ollamaName: 'llama3.3'
+  },
+  // Ollama-only heavyweights (no direct GGUF — rely on Ollama pull)
+  {
+    id: 'command-r-plus',
+    name: 'Command R+ (Cohere)',
+    filename: 'command-r-plus.gguf',
+    url: '',
+    sizeGB: '59.0',
+    sizeBytes: 59000000000,
+    description: 'Cohere\'s enterprise model. Requires Ollama to download.',
+    category: 'powerful',
+    contextSize: 131072,
+    minRAMGB: 64,
+    ollamaName: 'command-r-plus'
+  },
+  {
+    id: 'mixtral',
+    name: 'Mixtral 8x7B',
+    filename: 'mixtral-8x7b.gguf',
+    url: '',
+    sizeGB: '26.0',
+    sizeBytes: 26000000000,
+    description: 'Mistral\'s Mixture-of-Experts classic. Requires Ollama.',
+    category: 'powerful',
+    contextSize: 32768,
+    minRAMGB: 48,
+    ollamaName: 'mixtral'
+  },
+  {
+    id: 'nemotron',
+    name: 'Nemotron 70B',
+    filename: 'nemotron-70b.gguf',
+    url: '',
+    sizeGB: '42.0',
+    sizeBytes: 42000000000,
+    description: 'Nvidia\'s powerhouse. Requires Ollama to download.',
+    category: 'powerful',
+    contextSize: 4096,
+    minRAMGB: 64,
+    ollamaName: 'nemotron'
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // ──  CODE SPECIALISTS  ──
+  // ═══════════════════════════════════════════════════════════
   {
     id: 'qwen2.5-coder-7b',
     name: 'Qwen 2.5 Coder 7B',
@@ -191,6 +436,73 @@ export const AVAILABLE_MODELS: ModelPreset[] = [
     contextSize: 4096,
     minRAMGB: 8,
     ollamaName: 'qwen2.5-coder:7b'
+  },
+  {
+    id: 'qwen2.5-coder-32b',
+    name: 'Qwen 2.5 Coder 32B',
+    filename: 'qwen2.5-coder-32b-instruct-q4_k_m.gguf',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/qwen2.5-coder-32b-instruct-q4_k_m.gguf',
+    sizeGB: '19.0',
+    sizeBytes: 19000000000,
+    description: 'Pro-level code generation. Near GPT-4 on coding benchmarks.',
+    category: 'code',
+    contextSize: 4096,
+    minRAMGB: 32,
+    ollamaName: 'qwen2.5-coder:32b'
+  },
+  {
+    id: 'codegemma',
+    name: 'CodeGemma 7B',
+    filename: 'codegemma-7b-it-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/codegemma-7b-it-GGUF/resolve/main/codegemma-7b-it-Q4_K_M.gguf',
+    sizeGB: '5.0',
+    sizeBytes: 5000000000,
+    description: 'Google\'s code assistant. Trained on massive code corpus.',
+    category: 'code',
+    chatTemplate: 'gemma',
+    contextSize: 8192,
+    minRAMGB: 8,
+    ollamaName: 'codegemma'
+  },
+  {
+    id: 'deepseek-coder-v2',
+    name: 'DeepSeek Coder V2 Lite',
+    filename: 'DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF/resolve/main/DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf',
+    sizeGB: '8.9',
+    sizeBytes: 8900000000,
+    description: 'DeepSeek\'s code specialist. Mixture-of-Experts architecture.',
+    category: 'code',
+    contextSize: 4096,
+    minRAMGB: 16,
+    ollamaName: 'deepseek-coder-v2'
+  },
+  {
+    id: 'glm-4-9b',
+    name: 'GLM-4 9B (Powerful)',
+    filename: 'glm-4-9b-chat-Q4_K_M.gguf',
+    url: 'https://huggingface.co/second-state/glm-4-9b-chat-GGUF/resolve/main/glm-4-9b-chat-Q4_K_M.gguf',
+    sizeGB: '5.5',
+    sizeBytes: 5500000000,
+    description: 'Bilingual powerhouse. Excellent at following complex instructions.',
+    category: 'powerful',
+    chatTemplate: 'chatglm4',
+    contextSize: 8192,
+    minRAMGB: 12,
+    ollamaName: 'glm4'
+  },
+  {
+    id: 'starcoder2-15b',
+    name: 'StarCoder2 15B',
+    filename: 'starcoder2-15b-instruct-v0.1-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/starcoder2-15b-instruct-v0.1-GGUF/resolve/main/starcoder2-15b-instruct-v0.1-Q4_K_M.gguf',
+    sizeGB: '9.0',
+    sizeBytes: 9000000000,
+    description: 'BigCode\'s advanced coder. Great for multi-language code.',
+    category: 'code',
+    contextSize: 4096,
+    minRAMGB: 16,
+    ollamaName: 'starcoder2:15b'
   }
 ]
 
@@ -202,11 +514,11 @@ export interface DownloadResult {
 
 // Premium Onboarding: Engaging content for the wait
 export const AI_TIPS = [
-  "ClawDesk runs 100% locally. Your data never leaves this computer.",
-  "The 5.5GB download is a ONE-TIME setup. Future launches will be instant.",
+  "ClawdAsk runs 100% locally. Your data never leaves this computer.",
+  "The one-time download is a ONE-TIME setup. Future launches will be instant.",
   "Estimated time: 5-15 minutes, depending entirely on your internet speed.",
   "Downloaded models are stored safely in your AppData folder.",
-  "Ollama is a world-class engine that powers the brain of this app.",
+  "The local AI engine is world-class and battle-tested.",
   "GLM-4 is one of the most powerful bilingual (Chinese/English) models available.",
   "Local AI doesn't need an internet connection once the model is downloaded.",
   "You can switch between different models in the settings once setup is done."
@@ -350,17 +662,44 @@ export class LocalAIManager {
     const rawId = modelId.replace('local/', '').replace('ollama/', '')
     const preset = AVAILABLE_MODELS.find(m => m.id === rawId)
     if (!preset) return false
-    const modelPath = path.join(getModelsDir(), preset.filename)
     
-    // Systemic Fix: If the main file exists and is "healthy", ignore any ghost .download file
+    // For Ollama-only models, assume installed to bypass synchronous download blocks
+    if (!preset.url && preset.ollamaName) return true
+
+    const modelsDir = getModelsDir()
+    const modelPath = path.join(modelsDir, preset.filename)
+    
+    // 1. Check for exact filename match
     if (fs.existsSync(modelPath)) {
       const stats = fs.statSync(modelPath)
-      // Expect at least 1GB for GLM-4 or 50% of expected size
       const minSize = preset.sizeBytes ? (preset.sizeBytes * 0.8) : 500000000
-      if (stats.size >= minSize) {
-        return true
-      }
+      if (stats.size >= minSize) return true
     }
+
+    // 2. FLEXIBLE DETECTION: Check if any file in the models dir contains the model ID
+    // This handles cases where the user renamed the file or the version differs slightly.
+    try {
+      const files = fs.readdirSync(modelsDir)
+      const searchTerms = [rawId.toLowerCase(), preset.filename.split('.')[0].toLowerCase()]
+      
+      for (const file of files) {
+        if (!file.endsWith('.gguf')) continue
+        const lowerFile = file.toLowerCase()
+        
+        // If the filename contains our ID (e.g. "glm-4-9b") and is large enough, consider it a match
+        if (searchTerms.some(term => lowerFile.includes(term))) {
+          const stats = fs.statSync(path.join(modelsDir, file))
+          const minSize = preset.sizeBytes ? (preset.sizeBytes * 0.7) : 500000000
+          if (stats.size >= minSize) {
+            console.log(`[LocalAI] Flexible match found: ${file} for model ${rawId}`)
+            return true
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[LocalAI] Flexible detection failed:', e)
+    }
+
     return false
   }
 
@@ -401,16 +740,19 @@ export class LocalAIManager {
   }
 
   // ── Constants ──
-  public static readonly EMBEDDED_PORT = 8847
+  public static readonly EMBEDDED_PORT = 11434
   public static readonly OLLAMA_PORT = 11434
 
   // Wait for server to bind to port and respond
-  private async waitForServerReady(port: number, timeoutMs = 300000): Promise<boolean> {
+  public async waitForServerReady(port: number, timeoutMs = 30000): Promise<boolean> {
     const start = Date.now()
     const healthPath = port === LocalAIManager.OLLAMA_PORT ? '/' : '/health'
     while (Date.now() - start < timeoutMs) {
       try {
-        const res = await fetch(`http://127.0.0.1:${port}${healthPath}`)
+        // Use a strict 2s timeout for the probe itself to avoid hanging on the global 1-hour timeout
+        const res = await fetch(`http://127.0.0.1:${port}${healthPath}`, {
+          signal: AbortSignal.timeout(2000)
+        })
         if (res.ok) return true
       } catch {
         // expected to fail until server boots
@@ -449,9 +791,26 @@ export class LocalAIManager {
     if (preset?.ollamaName) {
       const ollamaRunning = await this.waitForServerReady(LocalAIManager.OLLAMA_PORT, 2000)
       if (ollamaRunning) {
-        const ollamaHas = await this.checkOllamaHasModel(preset.ollamaName)
+        const ollamaHas = await this.checkOllamaHasModel(rawId)
         if (ollamaHas) {
-          console.log(`[LocalAI] Ollama has ${preset.ollamaName}. Using Ollama on port ${LocalAIManager.OLLAMA_PORT}.`)
+          // Systemic Fix: Ensure ID alias exists if we found it via ollamaName
+          if (preset.ollamaName && preset.ollamaName !== rawId) {
+            try {
+              // Quick check if the exact rawId exists, if not, create it as an alias
+              const resp = await fetch('http://127.0.0.1:11434/api/tags', { signal: AbortSignal.timeout(1000) })
+              const data: any = await resp.json()
+              const hasExactId = (data.models || []).some((m: any) => m.name === rawId || m.name === `${rawId}:latest`)
+              
+              if (!hasExactId) {
+                console.log(`[LocalAI] Creating alias for ${rawId} from ${preset.ollamaName}...`)
+                execSync(`ollama cp ${preset.ollamaName} ${rawId}`, { windowsHide: true })
+              }
+            } catch (e) {
+              console.warn('[LocalAI] Failed to auto-alias model:', e)
+            }
+          }
+
+          console.log(`[LocalAI] Ollama has ${rawId}. Using Ollama on port ${LocalAIManager.OLLAMA_PORT}.`)
           this.isServerRunning = true
           this.activePort = LocalAIManager.OLLAMA_PORT
           this.activeBackend = 'ollama'
@@ -478,13 +837,13 @@ export class LocalAIManager {
         
         const args = [
           '-m', modelPath,
-          '--port', LocalAIManager.EMBEDDED_PORT.toString(),
-          '--n-gpu-layers', '0',
+          '--port', LocalAIManager.OLLAMA_PORT.toString(), // Hardened: Sync with gateway's expected port
+          '--n-gpu-layers', '99',
           '--ctx-size', String(preset.contextSize || 4096),
           '--parallel', '2',
-          '--jinja',
-          '--alias', modelId
+          '--alias', rawId
         ]
+        console.log(`[LocalAI] Starting engine with args: ${args.join(' ')}`)
 
         // Per-model chat template
         if (preset.chatTemplate) {
@@ -544,21 +903,21 @@ export class LocalAIManager {
             if (msg) console.log(`[LocalAI:stderr] ${msg}`)
           })
 
-          // Wait for engine to become ready (45s timeout)
-          const ready = await this.waitForServerReady(LocalAIManager.EMBEDDED_PORT, 45000)
+          // Wait for engine to become ready (3 minutes timeout for heavy GPU models)
+          const ready = await this.waitForServerReady(LocalAIManager.OLLAMA_PORT, 180000)
           clearTimeout(earlyExitTimer)
           clearInterval(progressInterval)
 
           if (ready && !earlyExit) {
             this.isServerRunning = true
-            this.activePort = LocalAIManager.EMBEDDED_PORT
+            this.activePort = LocalAIManager.OLLAMA_PORT
             this.activeBackend = 'embedded'
             this.downloadProgress = 100
             this.currentStatusText = `${preset?.name || modelId} is ready!`
-            console.log(`[LocalAI] Internal engine ready on port ${LocalAIManager.EMBEDDED_PORT}`)
-            return { success: true, port: LocalAIManager.EMBEDDED_PORT, backend: 'embedded' }
+            console.log(`[LocalAI] Internal engine ready on port ${LocalAIManager.OLLAMA_PORT}`)
+            return { success: true, port: LocalAIManager.OLLAMA_PORT, backend: 'embedded' }
           } else {
-            console.log('[LocalAI] Internal engine did not become ready. Cleaning up...')
+            console.log('[LocalAI] Internal engine did not become ready after 3 minutes. Cleaning up...')
             this.stopEngine()
           }
         } catch (err) {
@@ -573,6 +932,19 @@ export class LocalAIManager {
     if (ollamaStarted) {
       if (preset?.ollamaName) {
         const has = await this.checkOllamaHasModel(preset.ollamaName)
+        
+        if (preset.ollamaName !== rawId && has) {
+          try {
+            const resp = await fetch('http://127.0.0.1:11434/api/tags', { signal: AbortSignal.timeout(1000) })
+            const data: any = await resp.json()
+            const hasExactId = (data.models || []).some((m: any) => m.name === rawId || m.name === `${rawId}:latest`)
+            if (!hasExactId) {
+              console.log(`[LocalAI] Creating exact alias for ${rawId} from ${preset.ollamaName}...`)
+              execSync(`ollama cp ${preset.ollamaName} ${rawId}`, { windowsHide: true })
+            }
+          } catch (e) { console.warn('[LocalAI] Failed to auto-alias model in Ollama:', e) }
+        }
+
         if (!has) {
           console.log(`[LocalAI] Initializing background pull for ${preset.ollamaName}...`)
           this.pullOllamaModel(preset.ollamaName).catch(() => {})
@@ -629,7 +1001,9 @@ export class LocalAIManager {
 
     // Check Ollama
     try {
-      const resp = await fetch('http://127.0.0.1:11434/api/tags')
+      const resp = await fetch('http://127.0.0.1:11434/api/tags', {
+        signal: AbortSignal.timeout(2000)
+      })
       if (resp.ok) {
         ollamaRunning = true
         ollamaInstalled = true
@@ -657,16 +1031,22 @@ export class LocalAIManager {
   /**
    * Check if Ollama is running AND has a specific model loaded
    */
-  public async checkOllamaHasModel(ollamaName: string): Promise<boolean> {
+  public async checkOllamaHasModel(modelName: string): Promise<boolean> {
+    const rawId = modelName.replace('ollama/', '')
+    const preset = AVAILABLE_MODELS.find(m => m.id === rawId)
+    const searchTags = [rawId.toLowerCase()]
+    if (preset?.ollamaName) searchTags.push(preset.ollamaName.toLowerCase())
+
     try {
-      const resp = await fetch('http://127.0.0.1:11434/api/tags')
+      const resp = await fetch('http://127.0.0.1:11434/api/tags', {
+        signal: AbortSignal.timeout(2000)
+      })
       if (!resp.ok) return false
       const data: any = await resp.json()
       const models = data.models || []
       return models.some((m: any) => {
         const n = (m.name || '').toLowerCase()
-        const s = ollamaName.toLowerCase()
-        return n === s || n === s + ':latest' || n.startsWith(s + ':')
+        return searchTags.some(tag => n === tag || n === tag + ':latest' || n.startsWith(tag + ':'))
       })
     } catch {
       return false
@@ -679,17 +1059,10 @@ export class LocalAIManager {
   public async pullOllamaModel(name: string): Promise<void> {
     console.log(`[LocalAI] background pull for ${name} starting...`)
     try {
-      const resp = await fetch('http://127.0.0.1:11434/api/pull', {
-        method: 'POST',
-        body: JSON.stringify({ name })
-      })
-      if (!resp.ok) {
-        console.error(`[LocalAI] Failed to start Ollama pull: ${resp.statusText}`)
-        return
-      }
-      console.log(`[LocalAI] Ollama pull for ${name} is underway.`)
+      // Spawn detached process so we don't block the Node event loop or keep sockets hung
+      spawn('ollama', ['pull', name], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
     } catch (e) {
-      console.error(`[LocalAI] Network error during Ollama pull: ${e}`)
+      console.error(`[LocalAI] Failed to spawn ollama pull: ${e}`)
     }
   }
 
@@ -837,7 +1210,7 @@ export class LocalAIManager {
             'Accept': '*/*',
             'Connection': 'keep-alive'
           },
-          timeout: 300000  // 300 seconds (5 mins) for initial handshake
+          timeout: 3600000  // 3600 seconds (1 hour) for initial handshake
         }
 
         if (startByte > 0) {
@@ -1197,6 +1570,69 @@ export class LocalAIManager {
       }
     }
 
+    // ── Ollama-only models (no direct GGUF URL) ──
+    if (!preset.url && preset.ollamaName) {
+      console.log(`[LocalAI] Model ${preset.name} is Ollama-only. Pulling via Ollama...`)
+      onProgress?.(5, `Pulling ${preset.name} via Ollama...`)
+      
+      const ollamaReady = await this.ensureOllamaRunning()
+      if (!ollamaReady) {
+        return { 
+          success: false, 
+          error: `Ollama is required to download ${preset.name}. Please install and start Ollama first.`, 
+          errorCode: 'ENGINE_MISSING' 
+        }
+      }
+
+      try {
+        const resp = await fetch('http://127.0.0.1:11434/api/pull', {
+          method: 'POST',
+          body: JSON.stringify({ name: preset.ollamaName, stream: true }),
+          signal: AbortSignal.timeout(5000) // 5s to initiate the pull
+        })
+
+        if (!resp.ok) {
+          return { success: false, error: `Ollama pull failed: ${resp.statusText}`, errorCode: 'NETWORK' }
+        }
+
+        if (!resp.body) {
+          return { success: false, error: `Ollama pull returned empty body`, errorCode: 'NETWORK' }
+        }
+
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n').filter(Boolean)
+          
+          for (const line of lines) {
+            try {
+              const data = JSON.parse(line)
+              if (data.status === 'downloading' && data.total > 0) {
+                const percent = Math.floor((data.completed / data.total) * 100)
+                const mbDone = (data.completed / (1024 * 1024)).toFixed(0)
+                const mbTotal = (data.total / (1024 * 1024)).toFixed(0)
+                onProgress?.(percent, `${preset.name}: ${mbDone}/${mbTotal} MB (Ollama)`)
+              } else if (data.status) {
+                onProgress?.(0, `${preset.name}: ${data.status} (Ollama)`)
+              }
+            } catch (e) {
+              // Ignore partial JSON chunks
+            }
+          }
+        }
+
+        onProgress?.(100, `${preset.name} pulled successfully!`)
+        return { success: true }
+      } catch (e: any) {
+        return { success: false, error: `Ollama pull error: ${e.message}`, errorCode: 'NETWORK' }
+      }
+    }
+
     const outputFilePath = path.join(getModelsDir(), preset.filename)
     const tempPath = `${outputFilePath}.download`
     console.log(`[LocalAI] Downloading model ${preset.name} from: ${preset.url}`)
@@ -1207,17 +1643,6 @@ export class LocalAIManager {
     const result = await this.downloadFileWithProgress(preset.url, tempPath, (p, text) => {
       this.downloadProgress = p
       this.currentStatusText = `Downloading ${preset.name}: ${text}`
-      
-      // Cleanup: If we are downloading the new GLM-4, proactively delete the old heavy one to save space
-      if (modelId === 'glm-4-9b' && p > 5) {
-        const modelsDir = getModelsDir()
-        const oldGGUF = path.join(modelsDir, 'glm-4-9b-chat-Q4_K_M.gguf')
-        if (fs.existsSync(oldGGUF)) {
-          console.log('[LocalAI] Proactively deleting old GLM-4 Q4 to make room for Q2...')
-          try { fs.unlinkSync(oldGGUF) } catch {}
-        }
-      }
-      
       onProgress?.(p, `${preset.name}: ${text}`)
     })
 
@@ -1231,7 +1656,7 @@ export class LocalAIManager {
         console.error('[LocalAI] Final rename failed:', e)
         return { 
           success: false, 
-          error: `Failed to finalize download: ${e.message}. The file may be locked by another process. Please restart ClawDesk and try again.`, 
+          error: `Failed to finalize download: ${e.message}. The file may be locked by another process. Please restart ORRERY and try again.`, 
           errorCode: 'UNKNOWN' 
         }
       }

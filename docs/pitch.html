@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawdAsk — Pitch Deck & Marketing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            color: #ededed;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            scroll-snap-type: y mandatory;
+            height: 100vh;
+        }
+        .slide {
+            height: 100vh;
+            width: 100vw;
+            scroll-snap-align: start;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            padding: 40px;
+            position: relative;
+            border-bottom: 1px solid #111;
+        }
+        .content {
+            max-width: 900px;
+            width: 100%;
+            z-index: 10;
+        }
+        h1 { font-size: 64px; font-weight: 800; letter-spacing: -0.04em; margin-bottom: 24px; line-height: 1.1; }
+        h2 { font-size: 48px; font-weight: 800; letter-spacing: -0.04em; margin-bottom: 32px; color: #f97316; }
+        p { font-size: 24px; color: #888; margin-bottom: 40px; line-height: 1.5; }
+        .accent { color: #f97316; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+        .card { background: #0a0a0a; border: 1px solid #1a1a1a; padding: 32px; border-radius: 16px; }
+        .card h3 { font-size: 24px; margin-bottom: 16px; color: #ededed; }
+        .card p { font-size: 18px; margin-bottom: 0; }
+        
+        /* Slide Specifics */
+        .slide-1 h1 { font-size: 80px; text-align: center; }
+        .slide-1 p { text-align: center; }
+        
+        /* TikTok UI mock */
+        .tiktok-mock {
+            width: 320px; height: 560px;
+            background: #111; border: 2px solid #333; border-radius: 24px;
+            position: relative; overflow: hidden; margin: 0 auto;
+        }
+        .tt-video { position: absolute; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+        .tt-overlay { position: absolute; bottom: 20px; left: 20px; right: 60px; }
+        .tt-title { font-weight: 800; font-size: 18px; margin-bottom: 8px; color: #fff; }
+        .tt-desc { font-size: 14px; color: #ccc; line-height: 1.4; }
+        .tt-badge { background: #f97316; color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 800; display: inline-block; margin-bottom: 12px; }
+
+        /* Navigation */
+        .nav-hint { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); font-family: 'JetBrains Mono', monospace; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; animation: pulse 2s infinite; z-index: 100; pointer-events: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+    <div class="nav-hint">Scroll down ↓</div>
+
+    <!-- Slide 1: Title -->
+    <div class="slide slide-1">
+        <div class="content">
+            <h1>Meet <span class="accent">ClawdAsk</span></h1>
+            <p>The definitive autonomous agent platform.<br>Powered by OpenClaw. Built for power users.</p>
+            <div style="text-align: center; margin-top: 40px;">
+                <img src="favicon.svg" width="120">
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 2: The Problem/Solution -->
+    <div class="slide">
+        <div class="content">
+            <h2>The Paradigm Shift</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <h3 style="color: #666;">Yesterday</h3>
+                    <p>Chatbots that generate text. You still have to copy, paste, click, and execute the work manually.</p>
+                </div>
+                <div class="card" style="border-color: #f97316;">
+                    <h3 class="accent">Today</h3>
+                    <p>Digital Employees. You assign a task, and ClawdAsk takes over your mouse and keyboard to finish it autonomously.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 3: Capabilities -->
+    <div class="slide">
+        <div class="content">
+            <h2>Why It Wins</h2>
+            <p>We are not a SaaS wrapper. We are a native desktop orchestrator.</p>
+            <div class="grid-2" style="gap: 20px;">
+                <div class="card">
+                    <h3>1. Total Privacy</h3>
+                    <p style="font-size: 16px;">Runs local LLMs (Qwen/Llama) on your GPU. Zero data leaves the machine.</p>
+                </div>
+                <div class="card">
+                    <h3>2. Unrestricted Access</h3>
+                    <p style="font-size: 16px;">Full filesystem, browser, and OS control. It navigates apps like a human.</p>
+                </div>
+                <div class="card">
+                    <h3>3. Zero Subscriptions</h3>
+                    <p style="font-size: 16px;">One-time lifetime license. No recurring $20/month AI tax.</p>
+                </div>
+                <div class="card">
+                    <h3>4. Persistent Memory</h3>
+                    <p style="font-size: 16px;">Maintains project context across sessions locally.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 4: TikTok Marketing Strategy -->
+    <div class="slide">
+        <div class="content">
+            <h2>TikTok Go-to-Market</h2>
+            <p>Our strategy is pure, viral "show, don't tell". High-chaos, high-value hooks.</p>
+            <div class="grid-2">
+                <div>
+                    <ul style="list-style: none; font-size: 20px; line-height: 1.8; color: #aaa;">
+                        <li><strong style="color:#fff;">Hook:</strong> "I stopped doing my own job today."</li>
+                        <li><strong style="color:#fff;">Visual:</strong> Hands OFF the keyboard while the mouse flies around screen filling out spreadsheets autonomously.</li>
+                        <li><strong style="color:#fff;">The Reveal:</strong> "It's an autonomous AI employee that runs locally. No subscriptions."</li>
+                        <li><strong style="color:#fff;">Call to Action:</strong> Link in bio. Lifetime access.</li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="tiktok-mock">
+                        <div class="tt-video">
+                            <img src="favicon.svg" width="64" style="opacity: 0.5; margin-bottom: 20px;">
+                            <span style="font-family: 'JetBrains Mono'; font-size: 12px; color: #f97316;">[ SCREEN RECORDING ]</span>
+                        </div>
+                        <div class="tt-overlay">
+                            <span class="tt-badge">VIRAL HOOK</span>
+                            <div class="tt-title">"I literally hired an AI."</div>
+                            <div class="tt-desc">Watch it build a website while I drink coffee. 🤯 #ai #productivity #tech</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 5: The Offer -->
+    <div class="slide">
+        <div class="content" style="text-align: center;">
+            <h2>The Launch Offer</h2>
+            <p style="max-width: 600px; margin: 0 auto 40px;">Available directly on Whop. Verified by community trust.</p>
+            <div class="card" style="display: inline-block; text-align: left; border-color: #f97316; box-shadow: 0 0 40px rgba(249,115,22,0.15);">
+                <h3 style="font-size: 32px; margin-bottom: 8px;">Lifetime Access</h3>
+                <p style="font-size: 48px; font-weight: 800; color: #fff; margin-bottom: 24px;">$99<span style="font-size: 16px; color: #666; font-weight: 400;"> / one-time</span></p>
+                <ul style="list-style: none; font-size: 16px; color: #aaa; margin-bottom: 32px; line-height: 2;">
+                    <li>✓ Unrestricted Desktop Agent</li>
+                    <li>✓ Local & Cloud Engine Support</li>
+                    <li>✓ All Future Updates</li>
+                    <li>✓ Zero recurring fees</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

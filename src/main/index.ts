@@ -1,9 +1,16 @@
 try {
+  // Aggressive scrubbing of conflicting Electron env vars
   delete process.env['ELECTRON_RUN_AS_NODE']
   delete process.env['ELECTRON_NO_ASAR']
 } catch { }
 
-// Force Ollama Authentication for local bypass (OpenClaw requirement)
+// Disable hardware acceleration to prevent common "Black Screen" issues on diverse Windows GPUs
+const electron = require('electron')
+if (electron && electron.app) {
+  electron.app.disableHardwareAcceleration()
+}
+
+// Force Ollama Authentication for local bypass (ClawdAsk local engine requirement)
 process.env['OLLAMA_API_KEY'] = 'ollama-local'
 
 // Core imports
@@ -11,14 +18,43 @@ import { app, BrowserWindow, globalShortcut, dialog } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { join, dirname } from 'path'
 import { ChildProcess, spawn, execSync } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, renameSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from 'fs'
 import { homedir } from 'os'
 import http from 'http'
 import https from 'https'
 
-const OPENCLAW_DIR = join(homedir(), '.openclaw')
-const LOGS_DIR = join(OPENCLAW_DIR, 'logs')
+const CLAWDASK_DIR = join(homedir(), '.clawdask')
+
+const LOGS_DIR = join(CLAWDASK_DIR, 'logs')
 const CRASH_LOG = join(LOGS_DIR, 'app_crash.log')
+
+// ??? Data Directory Migration Shim ??????????????????????????????????????
+// Silently migrates existing .openclaw data to .clawdask for existing users
+function migrateDataDirIfNeeded(): void {
+  try {
+    const { existsSync, mkdirSync, readdirSync, copyFileSync, statSync } = require('fs')
+    const { join } = require('path')
+    const { homedir } = require('os')
+    const legacyDir = join(homedir(), '.openclaw')
+    const newDir = join(homedir(), '.clawdask')
+    
+    if (existsSync(legacyDir) && !existsSync(newDir)) {
+      addTrace('[migration] Migrating .openclaw ? .clawdask')
+      const migrate = (src: string, dest: string) => {
+        if (!existsSync(dest)) mkdirSync(dest, { recursive: true })
+        for (const item of readdirSync(src)) {
+          const s = join(src, item), d = join(dest, item)
+          try {
+            if (statSync(s).isDirectory()) migrate(s, d)
+            else copyFileSync(s, d)
+          } catch { /* skip locked files */ }
+        }
+      }
+      migrate(legacyDir, newDir)
+      addTrace('[migration] Data migration complete')
+    }
+  } catch (e) { addTrace(`[migration] Non-fatal error: ${e}`) }
+}
 const TRACE_LOG = join(LOGS_DIR, 'app_trace.log')
 
 // Global Logs/Crash Sentinel
@@ -57,8 +93,8 @@ function showCloudWarning(): void {
   dialog.showMessageBoxSync({
     type: 'warning',
     title: '⚠️ Cloud Path Detected',
-    message: 'ClawDesk is running from a synced folder (OneDrive/Desktop).',
-    detail: 'This WILL corrupt your AI models and crash the gateway.\n\nPlease move the application folder to C:\\ClawDesk before continuing.',
+    message: 'ClawdAsk is running from a synced folder (OneDrive/Desktop).',
+    detail: 'This WILL corrupt your AI models and crash the engine.\n\nPlease move the application folder to C:\\ClawdAsk before continuing.',
     buttons: ['I will move it now', 'Ignore (Risky)']
   })
 }
@@ -67,7 +103,7 @@ function showCloudWarning(): void {
 function setupDevPath() {
   try {
     if (process.env.NODE_ENV === 'development') {
-      const devDataPath = join(homedir(), '.openclaw', 'dev-data')
+      const devDataPath = join(homedir(), '.clawdask', 'dev-data')
       if (!existsSync(devDataPath)) mkdirSync(devDataPath, { recursive: true })
       if (app) app.setPath('userData', devDataPath)
     }
@@ -76,24 +112,24 @@ function setupDevPath() {
   }
 }
 
-const APP_ID = 'com.clawdesk.app'
+const APP_ID = 'com.clawdask.app'
 let GATEWAY_PORT = 18789
 let GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`
-const CONFIG_PATH = join(OPENCLAW_DIR, 'openclaw.json')
+const CONFIG_PATH = join(CLAWDASK_DIR, 'clawdask.json')
 import crypto from 'crypto'
 
 // ─── Self-Healing: Auto-repair missing OpenClaw build output ─────────
-function repairOpenClawDist(): void {
+function repairGatewayDist(): void {
   try {
     // Search in multiple possible locations
     const candidates = [
       join(app.getAppPath(), '..', 'app.asar.unpacked', 'node_modules', 'openclaw'),
       join(dirname(app.getPath('exe')), 'resources', 'app.asar.unpacked', 'node_modules', 'openclaw'),
-      'C:\\ClawDesk\\resources\\app.asar.unpacked\\node_modules\\openclaw'
+      'C:\\\\ClawdAsk\\\\resources\\\\app.asar.unpacked\\\\node_modules\\\\openclaw'
     ]
     
-    for (const openclawDir of candidates) {
-      const distDir = join(openclawDir, 'dist')
+    for (const gatewayDir of candidates) {
+      const distDir = join(gatewayDir, 'dist')
       const entryMjs = join(distDir, 'entry.mjs')
       const indexJs = join(distDir, 'index.js')
       
@@ -163,7 +199,7 @@ function sendGatewayStatus(msg: string) {
 
 // ─── Tunnel & Cloudflared Logic ────────────────────────────────────────
 class RuntimeManager {
-  private binDir = join(OPENCLAW_DIR, 'bin')
+  private binDir = join(CLAWDASK_DIR, 'bin')
   private nodePath = join(this.binDir, 'node.exe')
 
   async ensureRuntime(): Promise<string> {
@@ -246,10 +282,8 @@ class GatewayManager {
   private process: ChildProcess | null = null
   private state: GatewayState = 'stopped'
   private restartCount = 0
-  private maxRestarts = 3
-  private restartDelay = 2000
-  private lastCrashTime = 0
-  private crashFrequency = 0
+  private lastRestartAttempt = 0
+  private currentPort = GATEWAY_PORT
   private watchdogInterval: NodeJS.Timeout | null = null
   public runtime: RuntimeManager
 
@@ -290,11 +324,11 @@ class GatewayManager {
       'cache',
       'profiles'
     ]
-    if (!existsSync(OPENCLAW_DIR)) {
-      try { mkdirSync(OPENCLAW_DIR, { recursive: true }) } catch (e) { console.error('[env] Failed to create OPENCLAW_DIR:', e) }
+    if (!existsSync(CLAWDASK_DIR)) {
+      try { mkdirSync(CLAWDASK_DIR, { recursive: true }) } catch (e) { console.error('[env] Failed to create CLAWDASK_DIR:', e) }
     }
     subdirs.forEach(d => {
-      const p = join(OPENCLAW_DIR, d)
+      const p = join(CLAWDASK_DIR, d)
       try {
         if (!existsSync(p)) mkdirSync(p, { recursive: true })
       } catch (e) { console.error(`[env] Failed to create subdir ${d}:`, e) }
@@ -364,12 +398,19 @@ class GatewayManager {
             apiKey: 'local-embedded',
             api: 'openai-completions',
             baseUrl: 'http://127.0.0.1:11434/v1',
-            timeoutMs: 300000,
             models: AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name }))
           }
           changed = true
           addLog('[sentinel] Injected Local provider registration')
         }
+        
+        // Cleanup: remove timeoutSeconds as it violates gateway schema
+        if (config.models.providers.local?.timeoutSeconds !== undefined) {
+          delete config.models.providers.local.timeoutSeconds
+          changed = true
+          addLog('[sentinel] Removed invalid timeoutSeconds from config')
+        }
+
         // Cleanup: remove obsolete names if they were used for local engine
         if (config.models.providers.openai && config.models.providers.openai.apiKey === 'local-embedded') {
           delete config.models.providers.openai
@@ -404,6 +445,52 @@ class GatewayManager {
         }
       }
 
+      // 5. Bulletproof Provider Sanitization (Self-Healing)
+      const nativeProviders: Record<string, string> = {
+        'google': 'https://generativelanguage.googleapis.com/v1beta',
+        'anthropic': 'https://api.anthropic.com',
+        'openai': 'https://api.openai.com/v1'
+      }
+      
+      Object.entries(nativeProviders).forEach(([prov, defaultUrl]) => {
+        if (config.models?.providers?.[prov]) {
+          // If baseUrl is missing or looks suspicious (e.g. contains /v1/openai/ which causes 404s in some versions)
+          const current = config.models.providers[prov].baseUrl
+          if (!current || current.includes('/openai/') || current.includes('localhost')) {
+            config.models.providers[prov].baseUrl = defaultUrl
+            changed = true
+            addLog(`[sentinel] Restored default baseUrl for ${prov}`)
+          }
+          
+          if (config.models.providers[prov].api) {
+            delete config.models.providers[prov].api
+            changed = true
+          }
+        }
+      })
+      
+      // Cleanup legacy auth injections (identity)
+      if (config.auth?.profiles) {
+        Object.keys(config.auth.profiles).forEach(key => {
+          if (config.auth.profiles[key].identity) {
+            delete config.auth.profiles[key].identity
+            changed = true
+            addLog(`[sentinel] Scrubbed legacy identity key from profile ${key}`)
+          }
+        })
+      }
+
+      // 6. Model ID Sanitization (Fix legacy 404s)
+      if (config.agents?.defaults?.model?.primary === 'google/gemini-2.5-flash') {
+        config.agents.defaults.model.primary = 'google/gemini-2.0-flash'
+        changed = true
+        addLog('[sentinel] Upgraded gemini-2.5-flash to 2.0-flash in default model')
+      }
+      if (config.agents?.defaults?.model?.primary === 'google/gemini-2.5-pro') {
+        config.agents.defaults.model.primary = 'google/gemini-1.5-pro'
+        changed = true
+      }
+
       if (changed) writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
     } catch (e) { console.error('[config:sentinel] Error:', e) }
   }
@@ -415,23 +502,37 @@ class GatewayManager {
       const config = JSON.parse(rawConfig)
       
       const primaryModel = config?.agents?.defaults?.model?.primary || config?.model || ''
-      const targetModelId = config.models?.primaryModel || primaryModel || 'local/glm-4-9b'
+      const targetModelId = config.models?.primaryModel || primaryModel || 'local/llama3.2-3b'
       const engineModelId = targetModelId.replace('local/', '').replace('ollama/', '')
-      addLog(`[FORENSIC:ID:999] Active Code Active. Model: ${targetModelId}`)
-      addTrace(`[local-ai] Initialization for model: ${targetModelId} (Engine: ${engineModelId})`)
+      addLog(`[gateway] Local AI check for model: ${targetModelId}`)
       
+      // ─── INTELLIGENT PORT SENSING ───
+      // Probe currently configured port first to avoid unnecessary restarts/hangs
+      const currentLocal = config.models?.providers?.local
+      if (currentLocal?.baseUrl) {
+        try {
+          const url = new URL(currentLocal.baseUrl)
+          const port = parseInt(url.port)
+          if (port) {
+            addTrace(`[local-ai] Probing current port ${port}...`)
+            const isAlive = await localAIManager.waitForServerReady(port, 2000)
+            if (isAlive) {
+              addLog(`[gateway] Local AI already active on port ${port}. Skipping re-boot.`)
+              return
+            }
+          }
+        } catch { /* ignore invalid URL */ }
+      }
+
       // ─── OLLAMA NATIVE SUPPORT ───
       if (primaryModel.startsWith('ollama/')) {
         addLog('[gateway] Detected Ollama model. Ensuring service is active...')
         sendGatewayStatus('Verifying Ollama service...')
-        addTrace('[local-ai] Attempting Ollama native boot...')
         const ollamaOk = await localAIManager.ensureOllamaRunning()
         if (ollamaOk) {
           addLog('[gateway] Ollama service is active and responsive.')
-          addTrace('[local-ai] Ollama service is ready.')
         } else {
           addLog('[gateway:err] Ollama service could not be started automatically.')
-          addTrace('[local-ai] ERROR: Ollama service failed to start.')
         }
         return
       }
@@ -469,7 +570,14 @@ class GatewayManager {
 
       // 3. Start the engine (Ollama-first, embedded fallback)
       sendGatewayStatus('Warming up local AI engine...')
+      const pollTimer = setInterval(() => {
+        if ((localAIManager as any).currentStatusText) {
+          sendGatewayStatus((localAIManager as any).currentStatusText)
+        }
+      }, 500)
+      
       let result = await localAIManager.startEngine(targetModelId)
+      clearInterval(pollTimer)
       
       // ── AUTO-REPAIR: If engine is missing, download it ──
       if (!result.success && result.errorCode === 'ENGINE_MISSING') {
@@ -481,10 +589,13 @@ class GatewayManager {
            result = await localAIManager.startEngine(engineModelId)
         }
       }
-      if (result.success) {
-        addLog(`[gateway] Local AI engine (${result.backend}) active on port ${result.port}`)
+
+      // ── CRITICAL SYNC ──
+      // Update config even if merely INITIALIZING (pulling) to ensure port consistency
+      if (result.success || result.errorCode === 'INITIALIZING') {
+        const activePort = result.port || (result.backend === 'ollama' ? 11434 : 8847)
+        addLog(`[gateway] Local AI (${result.backend}) ${result.success ? 'active' : 'booting'} on port ${activePort}`)
         
-        // Update config baseUrl AND models list to match the active port and registry
         try {
           const raw = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
           const cfg = JSON.parse(raw)
@@ -492,25 +603,18 @@ class GatewayManager {
           if (!cfg.models.providers) cfg.models.providers = {}
           
           if (cfg.models.providers.local) {
-            cfg.models.providers.local.baseUrl = `http://127.0.0.1:${result.port}/v1`
-            cfg.models.providers.local.timeoutMs = 300000
-            // Systemic Fix: Populate the registry so gateway doesn't 404 early
+            cfg.models.providers.local.baseUrl = `http://127.0.0.1:${activePort}/v1`
             cfg.models.providers.local.models = AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name }))
             
             writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2))
-            addLog(`[gateway] Sync Complete: Port ${result.port}, Registry Size: ${cfg.models.providers.local.models.length}`)
-            addTrace(`[local-ai] Config hardened. Local provider now points to port ${result.port}`)
-          } else {
-             addLog(`[gateway:warn] Local provider missing in config. Attempting recovery...`)
-             // If missing, we should probably add it, but for now we log it.
+            addLog(`[gateway] Sync Complete: Port ${activePort}, Backend: ${result.backend}`)
           }
         } catch (e) {
           addLog(`[gateway:err] Failed to write updated config: ${e}`)
         }
-      } else if (result.errorCode === 'INITIALIZING') {
-        addLog(`[gateway] Local AI engine (${result.backend}) is currently warming up/pulling.`)
-        sendGatewayStatus('Digital brain is warming up... Please wait.')
-      } else {
+      }
+      
+      if (!result.success && result.errorCode !== 'INITIALIZING') {
         addLog('[gateway:err] Local AI engine failed to start: ' + localAIManager.getLastError())
       }
       
@@ -525,27 +629,55 @@ class GatewayManager {
       if (this.state === 'running') {
         const alive = await this.verifyGateway()
         if (!alive) {
-          addLog('[watchdog] Liveness probe failed — attempting auto-revive')
+          addLog('[watchdog] Gateway probe failed — initiating recovery')
           this.restart()
+        } else {
+          // Cross-check: Is the AI engine still alive on its port?
+          try {
+            const rawConfig = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
+            const config = JSON.parse(rawConfig)
+            const primaryModel = config?.agents?.defaults?.model?.primary || ''
+            if (primaryModel.startsWith('local/')) {
+              const url = new URL(config.models?.providers?.local?.baseUrl || 'http://127.0.0.1:11434')
+              const port = parseInt(url.port)
+              if (port) {
+                const aiAlive = await localAIManager.waitForServerReady(port, 1000)
+                if (!aiAlive) {
+                  addLog(`[watchdog] AI Engine (${port}) silent — attempting silent background restart`)
+                  this.ensureLocalEngineRunning().catch(() => {})
+                }
+              }
+            }
+          } catch { }
+        }
+      } else if (this.state === 'crashed' || this.state === 'stopped') {
+        // Aggressive Auto-Revive: If it's been more than 5 minutes since last restart attempt, try again
+        if (Date.now() - this.lastRestartAttempt > 300000 && !isQuitting) {
+          addLog('[watchdog] Gateway has been dead too long — forcing auto-revive')
+          this.start()
         }
       }
-    }, 60000) // Pulse check every 60s
+    }, 30000) // Pulse check every 30s
   }
+
+  private _bootInProgress = false
 
   async start(): Promise<boolean> {
     if (this.state === 'running' || this.state === 'starting') return true
+    if (this._bootInProgress) return false
+    this._bootInProgress = true
 
-    addTrace('gateway.start() - cleaning up zombies...')
-    sendGatewayStatus('Cleaning up old processes...')
+    addTrace('gateway.start() - fast cleanup...')
+    sendGatewayStatus('Starting ClawdAsk...')
     await this.cleanupZombies()
 
     addTrace('gateway.start() - ensuring runtime...')
-    sendGatewayStatus('Verifying Javascript runtime...')
     const nodeExec = await this.runtime.ensureRuntime()
     addTrace(`Runtime: ${nodeExec}`)
     const bin = this.findBin()
     if (!bin) {
       console.error('[gateway] Binary not found')
+      this._bootInProgress = false
       return false
     }
 
@@ -553,37 +685,51 @@ class GatewayManager {
     if (await this.verifyGateway()) {
       console.log('[gateway] Existing gateway detected — reusing')
       this.state = 'running'
+      this._bootInProgress = false
+      // Start engine in background after reuse
+      this.ensureLocalEngineRunning().catch(() => {})
       return true
     }
 
     this.state = 'starting'
-    sendGatewayStatus('Preparing secure environment...')
     this.ensureEnvironment()
     this.preStartConfigCleanup()
     
-    // STARTING LOCAL ENGINE - Blocking to ensure config is correct before gateway reads it
-    sendGatewayStatus('Initializing local AI brain...')
-    addLog('[gateway] Ensuring local AI engine is ready...')
-    await this.ensureLocalEngineRunning().catch(e => {
-      addLog(`[gateway:err] AI initialization encountered a problem: ${e}`)
-    })
-    addLog('[gateway] Local AI check complete.')
+    // LOCAL ENGINE STARTS AFTER GATEWAY (non-blocking)
+    // The gateway doesn't need the engine to boot — it just needs correct config
+    addLog('[gateway] Engine will start after gateway is online.')
 
     // ── SELF-HEAL: Repair missing build output before spawning ──
-    repairOpenClawDist()
+    repairGatewayDist()
     
     console.log(`[gateway] Starting: ${bin}`)
-    sendGatewayStatus('Booting OpenClaw Engine...')
+    sendGatewayStatus('Booting ClawdAsk Engine...')
 
-    const logPath = join(OPENCLAW_DIR, 'logs', 'gateway_error.log')
+    const logPath = join(CLAWDASK_DIR, 'logs', 'gateway_error.log')
     const errorLog = require('fs').createWriteStream(logPath, { flags: 'a' })
     errorLog.write(`\n--- [${new Date().toISOString()}] Starting Gateway ---\n`)
+
+    // ── SELF-HEAL: Port Conflict Resolver ──
+    try {
+      const isPortTaken = await this.isPortAvailable(this.currentPort)
+      if (!isPortTaken) {
+        addLog(`[self-heal] Port ${this.currentPort} in use. Finding alternative...`)
+        for (let p = 18789; p < 18800; p++) {
+          if (await this.isPortAvailable(p)) {
+            this.currentPort = p
+            addLog(`[self-heal] Migration successful: Using port ${p}`)
+            break
+          }
+        }
+      }
+    } catch { }
 
     this.process = spawn(nodeExec, [bin, 'gateway'], {
       env: {
         ...process.env,
         NODE_ENV: 'production',
-        ELECTRON_RUN_AS_NODE: '1'
+        ELECTRON_RUN_AS_NODE: '1',
+        PORT: this.currentPort.toString()
       },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
@@ -603,7 +749,7 @@ class GatewayManager {
       const s = d.toString()
       console.log(`[gateway] ${s.trim()}`)
       if (s.toLowerCase().includes('started') || s.toLowerCase().includes('listening')) {
-        sendGatewayStatus('OpenClaw Base initialized...')
+        sendGatewayStatus('ClawdAsk Engine initialized...')
       }
     })
     this.process.stderr?.on('data', (d: Buffer) => {
@@ -648,7 +794,8 @@ class GatewayManager {
       if ((this.state as string) === 'crashed') {
         const msg = '[gateway:err] Gateway process failed to stay alive during boot.'
         addLog(msg)
-        addLog('[gateway:warn] TIP: If the app is in OneDrive/Desktop, it may be corrupting files. Move it to C:\\ClawDesk.')
+        addLog('[gateway:warn] TIP: If the app is in OneDrive/Desktop, it may be corrupting files. Move it to C:\\ClawdAsk.')
+        sendGatewayStatus('FATAL_ERROR: The ClawdAsk engine crashed immediately during boot. Please run Diagnostics or check Error Logs.')
         return false
       }
 
@@ -670,8 +817,15 @@ class GatewayManager {
       GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`
       this.state = 'running'
       this.restartCount = 0
+      this._bootInProgress = false
       
       addLog(`[gateway] Port ${GATEWAY_PORT} detected. Gateway is online.`)
+      
+      // DEFERRED ENGINE START: Now that the dashboard is visible, warm up the AI in background
+      this.ensureLocalEngineRunning().catch(e => {
+        addLog(`[gateway:err] Background AI initialization problem: ${e}`)
+      })
+      
       this.startWatchdog()
       this.startTunnelSync()
       this.updateTray()
@@ -688,6 +842,7 @@ class GatewayManager {
 
       return true
     }
+    this._bootInProgress = false
     this.state = 'crashed'
     return false
   }
@@ -714,59 +869,33 @@ class GatewayManager {
 
   private async cleanupZombies(): Promise<void> {
     if (process.platform !== 'win32') return
+    // FAST CLEANUP: Only kill the specific process holding our port.
+    // Do NOT run slow `taskkill /IM` commands that hang for 20+ seconds.
     try {
-      addLog('[proc] Cleaning up potential ghost processes...')
-
-      // 1. Kill any existing cloudflared or hanging openclaw processes
-      // WARNING: Do NOT kill ClawDesk.exe as it represents the current process in production!
-      const targets = ['cloudflared.exe', 'openclaw.exe']
-      targets.forEach(img => {
-        try {
-          addTrace(`Cleanup: killing ${img}...`)
-          execSync(`taskkill /F /IM ${img} /T`, { stdio: 'ignore', windowsHide: true })
-        } catch { }
-      })
-
-      // 2. Identify if anything is on our port
+      const myPid = process.pid
+      addTrace('[proc] Fast port cleanup...')
+      
+      // Only reclaim the gateway port if something else is holding it
       try {
-        const portInfo = execSync(`netstat -ano | findstr :${GATEWAY_PORT}`, { encoding: 'utf-8', windowsHide: true })
+        const portInfo = execSync(
+          `netstat -ano | findstr :${this.currentPort} | findstr LISTENING`,
+          { encoding: 'utf-8', windowsHide: true, timeout: 2000 }
+        )
         if (portInfo.trim()) {
           const lines = portInfo.trim().split('\n')
-          lines.forEach(line => {
+          for (const line of lines) {
             const parts = line.trim().split(/\s+/)
-            const pid = parts[parts.length - 1]
-            if (pid && !isNaN(parseInt(pid)) && parseInt(pid) !== process.pid) {
-              addLog(`[proc] Reclaiming port ${GATEWAY_PORT} from PID ${pid}`)
-              try { execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore', windowsHide: true }) } catch { }
+            const pid = parseInt(parts[parts.length - 1])
+            if (pid && pid !== myPid && pid !== 0) {
+              addLog(`[proc] Reclaiming port ${this.currentPort} from PID ${pid}`)
+              try { execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore', windowsHide: true, timeout: 2000 }) } catch { }
             }
-          })
+          }
         }
-      } catch (e) { /* Likely no process found */ }
-
-      addTrace('[proc] Port reclamation complete')
-      addLog('[proc] Zero-Crash Guard: Environment sanitized')
+      } catch { /* port is free, nothing to do */ }
+      addTrace('[proc] Port cleanup complete')
     } catch (e) {
       addLog(`[proc] Cleanup warning: ${e}`)
-    }
-  }
-
-  private enterSafeMode(): void {
-    addLog('[safe-mode] Entering Safe Mode due to frequent crashes')
-    this.state = 'crashed'
-    if (tray) {
-      tray.displayBalloon({
-        title: 'ClawDesk Safe Mode',
-        content: 'Gateway is crashing repeatedly. Settings have been reset to safe defaults.'
-      })
-    }
-    // Force safe config
-    if (existsSync(CONFIG_PATH)) {
-      try {
-        const rawConfig = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
-        const config = JSON.parse(rawConfig)
-        if (config.agents?.defaults?.sandbox) config.agents.defaults.sandbox.mode = 'off'
-        writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
-      } catch { }
     }
   }
 
@@ -778,34 +907,27 @@ class GatewayManager {
 
   private async handleCrash(): Promise<void> {
     const now = Date.now()
-    if (now - this.lastCrashTime < 60000) {
-      this.crashFrequency++
-    } else {
-      this.crashFrequency = 1
-    }
-    this.lastCrashTime = now
+    this.lastRestartAttempt = now
 
-    if (this.crashFrequency >= 3) {
-      this.enterSafeMode()
-      return
-    }
-
-    if (this.restartCount >= this.maxRestarts) {
-      console.error(`[gateway] Max restarts (${this.maxRestarts}) reached`)
-      this.updateTray()
+    this.state = 'restarting'
+    this.restartCount++
+    
+    // Exponential Backoff: 2s, 4s, 8s, 16s, 32s, maxing out at 60s
+    const delay = Math.min(Math.pow(2, this.restartCount) * 1000, 60000)
+    
+    addLog(`[gateway] Crash detected. Restarting in ${delay/1000}s (Attempt #${this.restartCount})`)
+    this.updateTray()
+    
+    if (this.restartCount > 5) {
       if (tray) {
         tray.displayBalloon({
-          title: 'ClawDesk',
-          content: 'Gateway stopped unexpectedly. Click tray icon to troubleshoot.'
+          title: 'ClawdAsk Resilience',
+          content: 'The ClawdAsk engine is struggling to stay alive. We are retrying in the background.'
         })
       }
-      return
+      sendGatewayStatus('FATAL_ERROR: The engine crashed multiple times. Please run Diagnostics or check Error Logs.')
     }
-    this.restartCount++
-    this.state = 'restarting'
-    const delay = this.restartDelay * this.restartCount
-    console.log(`[gateway] Restart in ${delay}ms (${this.restartCount}/${this.maxRestarts})`)
-    this.updateTray()
+
     await new Promise(r => setTimeout(r, delay))
     if (this.state === 'restarting') await this.start()
   }
@@ -814,12 +936,21 @@ class GatewayManager {
 
   private verifyGateway(): Promise<boolean> {
     return new Promise((resolve) => {
-      const req = http.get(`http://127.0.0.1:${GATEWAY_PORT}`, (res) => {
+      const req = http.get(`http://127.0.0.1:${this.currentPort}`, (res) => {
         resolve(res.statusCode !== undefined && res.statusCode < 500)
         res.resume()
       })
       req.on('error', () => resolve(false))
       req.setTimeout(5000, () => { req.destroy(); resolve(false) })
+    })
+  }
+
+  private isPortAvailable(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const server = require('net').createServer()
+      server.once('error', () => resolve(false))
+      server.once('listening', () => { server.close(); resolve(true) })
+      server.listen(port, '127.0.0.1')
     })
   }
 
@@ -851,7 +982,9 @@ const gateway = new GatewayManager()
 // ─── Utilities ───────────────────────────────────────────────────────────
 function checkPort(port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const req = http.get(`http://127.0.0.1:${port}`, () => resolve(true))
+    const req = http.get(`http://127.0.0.1:${port}/`, (res) => {
+      resolve(res.statusCode === 200)
+    })
     req.on('error', () => resolve(false))
     req.setTimeout(2000, () => { req.destroy(); resolve(false) })
   })
@@ -868,6 +1001,18 @@ async function waitForPortRange(startPort: number, endPort: number, timeoutMs = 
   return null
 }
 
+function isLicenseActive(): boolean {
+  const licensePath = join(CLAWDASK_DIR, 'license.json')
+  if (!existsSync(licensePath)) return false
+  try {
+    const license = JSON.parse(readFileSync(licensePath, 'utf-8'))
+    // Basic verification for now: check if status is active
+    return license.status === 'active' || license.activated === true
+  } catch {
+    return false
+  }
+}
+
 function hasValidConfig(): boolean {
   if (!existsSync(CONFIG_PATH)) return false
   try {
@@ -880,11 +1025,6 @@ function hasValidConfig(): boolean {
     
     return !!(hasProfiles || hasModels || hasLegacy || hasDirect)
   } catch {
-    try {
-      const backup = CONFIG_PATH + '.bak.' + Date.now()
-      renameSync(CONFIG_PATH, backup)
-      console.error(`[config] Corrupt config backed up to ${backup}`)
-    } catch { /* ignore */ }
     return false
   }
 }
@@ -914,8 +1054,8 @@ function cleanConfig(config: any): any {
 function getAutoStartEnabled(): boolean {
   if (process.platform !== 'win32') return false
   try {
-    const result = execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawDesk', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
-    return result.includes('ClawDesk')
+    const result = execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawdAsk', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+    return result.includes('ClawdAsk')
   } catch { return false }
 }
 
@@ -926,9 +1066,9 @@ function setAutoStart(enabled: boolean): void {
   try {
     if (enabled) {
       const exePath = app.getPath('exe')
-      execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawDesk /t REG_SZ /d "\\"${exePath}\\" --minimized" /f`, { stdio: 'ignore' })
+      execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawdAsk /t REG_SZ /d "\\"${exePath}\\" --minimized" /f`, { stdio: 'ignore' })
     } else {
-      execSync('reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawDesk /f', { stdio: 'ignore' })
+      execSync('reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v ClawdAsk /f', { stdio: 'ignore' })
     }
   } catch { /* ignore */ }
 }
@@ -1061,34 +1201,32 @@ function createMainWindow(): void {
 
   mainWindow.loadURL(initialUrl)
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    // ─── ClawDesk Branding Injection ───────────────────────────────────
-    // The OpenClaw Gateway Dashboard already has ALL features:
-    // Chat, Channels, Sessions, Cron, Agents, Skills, Nodes, Config, Logs, etc.
-    // We just rebrand it with ClawDesk identity.
+  const injectBranding = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
 
     const brandingCSS = `
       /* ── Hide OpenClaw onboarding wizard (we have our own) ── */
       div[class*="SetupWizard"], div[class*="Onboarding"] { display: none !important; }
 
-      /* ── Replace OpenClaw logo with ClawDesk style ── */
-      [alt="OpenClaw Logo"], .openclaw-logo, img[src*="logo"], svg:has(path[d*="M12 2A10 10 1"]) {
+      /* Override gateway logo CSS selectors */
+      [alt="ClawdAsk Logo"], .openclaw-logo, img[src*="logo"], svg:has(path[d*="M12 2A10 10 1"]), 
+      svg[viewBox="0 0 24 24"]:has(path[d^="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"]) {
         display: none !important;
       }
 
-      /* ── Premium dark theme override ── */
+      /* ── Premium deep black & orange theme override ── */
       :root {
-        --bg-primary: #0a0a0a !important;
-        --bg-secondary: #0f0f0f !important;
-        --bg-tertiary: #141414 !important;
-        --bg-quaternary: #1a1a1a !important;
+        --bg-primary: #000000 !important;
+        --bg-secondary: #050505 !important;
+        --bg-tertiary: #0a0a0a !important;
+        --bg-quaternary: #111111 !important;
         --text-primary: #ffffff !important;
         --text-secondary: #a0a0a0 !important;
         --text-tertiary: #666666 !important;
-        --accent-primary: #ffffff !important;
-        --accent-secondary: #e0e0e0 !important;
+        --accent-primary: #f97316 !important; /* Orange */
+        --accent-secondary: #fb923c !important; /* Lighter Orange */
         --border-color: rgba(255,255,255,0.08) !important;
-        --border-color-hover: rgba(255,255,255,0.15) !important;
+        --border-color-hover: rgba(249, 115, 22, 0.2) !important;
         
         /* ── Specific OpenClaw Overrides ── */
         --color-background: var(--bg-primary) !important;
@@ -1099,6 +1237,20 @@ function createMainWindow(): void {
         --color-text-muted: var(--text-secondary) !important;
         --color-border: var(--border-color) !important;
         --sidebar-bg: var(--bg-primary) !important;
+
+        /* ClawdAsk Theme Variables */
+        --accent: #f97316 !important;
+        --primary: #f97316 !important;
+        --ring: #f97316 !important;
+        --accent-glow: transparent !important; /* NO NEON */
+        
+        /* Radix / UI Lib specific overrides */
+        --orange-9: #f97316 !important;
+        --orange-10: #fb923c !important;
+        --blue-9: #f97316 !important; /* Override all blues to orange */
+        --blue-10: #fb923c !important;
+        --red-9: #f97316 !important;
+        --red-10: #fb923c !important;
       }
 
       /* ── Hardcode background elements ── */
@@ -1118,16 +1270,48 @@ function createMainWindow(): void {
         border-bottom: 1px solid var(--border-color) !important;
       }
 
+      /* ── Aggressive Color Overrides ── */
+      .text-orange-500, .text-orange-600, .bg-orange-500, .bg-orange-600, 
+      .text-red-500, .text-red-600, .bg-red-500, .bg-red-600,
+      .text-blue-500, .text-blue-600, .bg-blue-500, .bg-blue-600 {
+        color: #f97316 !important;
+        background-color: #f97316 !important;
+      }
+      
+      [class*="accent"], [class*="primary"], [class*="active"], [class*="Button"][class*="primary"] {
+        color: #ffffff !important;
+        background-color: #f97316 !important;
+        border-color: #f9731666 !important;
+        --accent: #f97316 !important;
+        --ring: #f97316 !important;
+        --primary: #f97316 !important;
+        --accent-hover: #fb923c !important;
+        --accent-glow: transparent !important; /* NO NEON */
+      }
+
       /* ── Button aesthetics ── */
       button {
         border-radius: 8px !important;
       }
-      button.primary, button[type="submit"] {
-        background-color: #ffffff !important;
-        color: #000000 !important;
+      button.primary, button[type="submit"], .chat-send-btn, .btn.primary {
+        background-color: #f97316 !important;
+        color: #ffffff !important;
         font-weight: 600 !important;
+        transition: all 0.2s ease !important;
       }
       
+      /* ── Dynamic "Thinking" Animation (Flat, No Neon) ── */
+      @keyframes sky-pulse-flat {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.8; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      
+      .chat-send-btn.is-thinking {
+        animation: sky-pulse-flat 1.5s infinite ease-in-out !important;
+        background-color: #f43f5e !important; /* Flat Rose for Stop */
+      }
+
       /* ── Card & Input aesthetics ── */
       .card, div[class*="Card"], div[class*="Container"], input, textarea, select {
         background-color: var(--bg-tertiary) !important;
@@ -1136,29 +1320,31 @@ function createMainWindow(): void {
         border-radius: 12px !important;
       }
       input:focus, textarea:focus {
-        border-color: var(--accent-secondary) !important;
+        border-color: #f97316 !important;
         outline: none !important;
-        box-shadow: 0 0 0 2px rgba(255,255,255,0.1) !important;
+        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1) !important;
       }
       
       /* ── Scrollbars ── */
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+      ::-webkit-scrollbar-thumb { background: rgba(249, 115, 22, 0.1); border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(249, 115, 22, 0.2); }
     `
-    mainWindow?.webContents.insertCSS(brandingCSS)
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.insertCSS(brandingCSS)
 
-    // ─── JS Branding: Replace all "OpenClaw" text with "ClawDesk" ───
     const brandingScript = `
       (function() {
-        if (window.__clawdeskBranded) return;
-        window.__clawdeskBranded = true;
-
         const REPLACEMENT_MAP = [
-          [/OpenClaw/gi, 'ClawDesk'],
-          [/OPENCLAW/gi, 'CLAWDESK'],
-          [/openclaw/gi, 'clawdesk']
+          { regex: /OpenClaw/g, replacement: 'ClawdAsk' },
+          { regex: /OPENCLAW/g, replacement: 'CLAWDASK' },
+          { regex: /OpenClaw/g, replacement: 'ClawdAsk' },
+          { regex: /Assistant/g, replacement: 'ClawdAsk' },
+          { regex: /Message OpenClaw/g, replacement: 'Message ClawdAsk' },
+          { regex: /Send a message to OpenClaw/g, replacement: 'Send a message to ClawdAsk' },
+          { regex: /OpenClaw is an open source/g, replacement: 'ClawdAsk is a premium' },
+          { regex: /About OpenClaw/g, replacement: 'About ClawdAsk' },
+          { regex: /Connect to OpenClaw/g, replacement: 'Connect to ClawdAsk' }
         ];
 
         function applyReplacements(text) {
@@ -1170,14 +1356,12 @@ function createMainWindow(): void {
           return newText;
         }
 
-        // ── Surgical Rebranding ──
         function rebrand(root = document.body) {
-          if (document.title.includes('OpenClaw')) {
+          if (document.title.includes('ClawdAsk')) {
             document.title = applyReplacements(document.title);
           }
 
-          // Use a more efficient approach: target specific elements first
-          const targetSelectors = 'h1, h2, h3, h4, [class*="brand"], [class*="logo"], [class*="title"], [class*="header"], span, a, p, button, label, li';
+          const targetSelectors = 'h1, h2, h3, h4, [class*="brand"], [class*="logo"], [class*="title"], [class*="header"], span, a, p, button, label, li, strong, b, div';
           root.querySelectorAll(targetSelectors).forEach(el => {
             if (el.childNodes.length > 0) {
               el.childNodes.forEach(child => {
@@ -1190,75 +1374,75 @@ function createMainWindow(): void {
             }
           });
 
-          // Input placeholders
           root.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(el => {
             const oldText = el.placeholder;
             const newText = applyReplacements(oldText);
             if (oldText !== newText) el.placeholder = newText;
           });
 
-          // Logo images - Convert to text brand mark
           root.querySelectorAll('img[src*="logo"], img[alt*="OpenClaw"], img[alt*="openclaw"], svg[class*="logo"]').forEach(img => {
             if (img.parentElement && !img.dataset.branded) {
               img.dataset.branded = 'true';
-              img.style.display = 'none'; // Ensure it's hidden
-              
+              img.style.display = 'none';
               const brandContainer = document.createElement('div');
               brandContainer.style.cssText = 'display:flex;align-items:center;gap:8px;';
-              
-              // Custom minimalist text logo
               const brandIcon = document.createElement('div');
-              brandIcon.innerHTML = '<svg width="24" height="24" viewBox="0 0 40 40" fill="none"><path d="M8 28 L14 12 L20 22 L26 12 L32 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="32" r="2" fill="#fff" opacity=".3"/></svg>';
-              
+              brandIcon.innerHTML = '<svg width="24" height="24" viewBox="0 0 40 40" fill="none"><path d="M8 28 L14 12 L20 22 L26 12 L32 28" stroke="#f97316" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="32" r="2" fill="#f97316" opacity=".3"/></svg>';
               const brandText = document.createElement('span');
-              brandText.textContent = 'ClawDesk';
-              brandText.style.cssText = 'font-weight:700;font-size:18px;letter-spacing:-0.5px;color:#fff;font-family:"Inter",sans-serif;margin-left:4px;';
-              
+              brandText.textContent = 'ClawdAsk';
+              brandText.style.cssText = 'font-weight:700;font-size:18px;letter-spacing:-0.5px;color:#fff;font-family:\"Inter\",sans-serif;margin-left:4px;';
               brandContainer.appendChild(brandIcon);
               brandContainer.appendChild(brandText);
-              
               img.parentElement.insertBefore(brandContainer, img);
+            }
+          });
+
+          // Simplify the UI by hiding only purely diagnostic/unnecessary settings
+          const complexLabels = ['Last start', 'Last probe', 'Probe ok', 'Ack Reaction', 'Auth age'];
+          root.querySelectorAll('span, label, p, div').forEach(el => {
+            if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
+              const text = el.textContent.trim();
+              if (complexLabels.includes(text)) {
+                // Find parent row container and hide it
+                const row = el.closest('.flex.items-center.justify-between, [class*="row"], .mb-4');
+                if (row && row.style.display !== 'none') {
+                  row.style.display = 'none';
+                } else if (!row && el.parentElement && el.parentElement.style.display !== 'none') {
+                  el.parentElement.style.display = 'none';
+                }
+              }
             }
           });
         }
 
-        requestAnimationFrame(() => rebrand());
+        rebrand();
+        setInterval(rebrand, 2000); 
 
-        // ── Efficient MutationObserver ──
-        const observer = new MutationObserver((mutations) => {
-          let shouldRebrand = false;
-          for (const mutation of mutations) {
-            if (mutation.addedNodes.length > 0) {
-              shouldRebrand = true;
-              for (const node of mutation.addedNodes) {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                  try { requestAnimationFrame(() => rebrand(node)); } catch(e){}
-                }
-              }
-            }
-          }
-          if (shouldRebrand) {
-            requestAnimationFrame(() => {
-              if (document.title.includes('OpenClaw')) document.title = applyReplacements(document.title);
-            });
-          }
-        });
-        
+        const observer = new MutationObserver(() => rebrand());
         observer.observe(document.body, { childList: true, subtree: true });
-
       })();
     `
-    mainWindow?.webContents.executeJavaScript(brandingScript)
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(brandingScript).catch(() => {});
+    }
+  };
 
-    // ─── Gateway Token Injection ───
-    // Automatically authorize the dashboard using the token from openclaw.json
-    try {
-      if (existsSync(CONFIG_PATH)) {
-        const rawConfig = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
-        const config = JSON.parse(rawConfig);
-        const token = config.gateway?.auth?.token;
-        if (token) {
-          const tokenScript = `
+  mainWindow.webContents.on('did-finish-load', injectBranding);
+  mainWindow.webContents.on('did-navigate', injectBranding);
+  mainWindow.webContents.on('did-frame-finish-load', injectBranding);
+  
+  // Initial injection attempt
+  injectBranding();
+
+  // ─── Gateway Token Injection ───
+  // Automatically authorize the dashboard using the token from clawdask.json
+  try {
+    if (existsSync(CONFIG_PATH)) {
+      const rawConfig = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
+      const config = JSON.parse(rawConfig);
+      const token = config.gateway?.auth?.token;
+      if (token) {
+        const tokenScript = `
             (function() {
               const TOKEN = "${token}";
               
@@ -1271,18 +1455,13 @@ function createMainWindow(): void {
 
               // 2. Auto-Fill and Click (if UI is visible and shows "Unauthorized" or "Token Required")
               function attemptAutoConnect() {
-                // Look for input fields that might be asking for a token
-                const inputs = document.querySelectorAll('input[type="password"], input[type="text"]');
-                let foundInput = false;
-                
-                inputs.forEach(input => {
-                  const placeholder = (input.placeholder || "").toLowerCase();
-                  if (placeholder.includes("token") || placeholder.includes("password") || placeholder.includes("key")) {
-                    if (input.value !== TOKEN) {
-                      input.value = TOKEN;
-                      input.dispatchEvent(new Event('input', { bubbles: true }));
-                      foundInput = true;
-                    }
+                // Check for token input fields and fill them
+                const tokenInputs = document.querySelectorAll('input[type="password"], input[type="text"][placeholder*="token"], input[type="text"][placeholder*="key"]');
+                tokenInputs.forEach(input => {
+                  if (!input.value || input.value.length < 5) { // Only fill if empty or very short
+                    input.value = TOKEN;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
                   }
                 });
 
@@ -1309,7 +1488,7 @@ function createMainWindow(): void {
     } catch (e) {
       addLog(`[auth:err] Failed to inject gateway token: ${e}`);
     }
-  })
+  // This was the misplaced `})`
   mainWindow.webContents.on('did-fail-load', (_event, _errorCode, _errorDescription) => {
     addLog('[ui:err] Failed to load gateway URL. Retrying in 3 seconds...')
     setTimeout(() => {
@@ -1335,7 +1514,7 @@ function createTray(): void {
   const { nativeImage, Tray } = electron
   const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAARklEQVQ4y2NgGAUowMjIyMDAwMBwHpcCFgYGBgVcGpiwKWBiYGBQwKeBBZsCJnwaWHBpYMKlATkQ8WlgwaeBBZ8GFnwOAQBYjAf3C2TzlgAAAABJRU5ErkJggg==')
   tray = new Tray(icon)
-  tray.setToolTip('ClawDesk')
+  tray.setToolTip('ClawdAsk')
   createTrayMenu()
   tray.on('double-click', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1354,10 +1533,17 @@ function createTrayMenu(): void {
   const electron = require('electron')
   if (!electron) return
   const { Menu, shell, dialog, app } = electron
-  const labels: any = { stopped: '⚫ Stopped', starting: '🟡 Starting…', running: '⚪ Running', crashed: '🔴 Crashed', restarting: '🟡 Restarting…' }
+  const labels: any = { 
+    stopped: '⚫ Stopped (Manual)', 
+    starting: '🟡 Starting Engine...', 
+    running: '⚪ Online & Ready', 
+    crashed: '🔴 Recovering...', 
+    restarting: '🟡 Reconnecting...' 
+  }
+  
   const menu = Menu.buildFromTemplate([
     { 
-      label: 'Open ClawDesk', 
+      label: 'Open ClawdAsk', 
       click: () => { 
         if (mainWindow && !mainWindow.isDestroyed()) { 
           mainWindow.show(); mainWindow.focus() 
@@ -1370,15 +1556,15 @@ function createTrayMenu(): void {
       } 
     },
     { type: 'separator' },
-    { label: `Gateway: ${labels[gateway.currentState]}`, enabled: false },
-    { type: 'separator' },
+    { label: `Status: ${labels[gateway.currentState]}`, enabled: false },
     { label: 'Restart Gateway', click: async () => { await gateway.restart() } },
-    { label: 'Run Diagnostics', click: () => { try { const bin = gateway.findBin(); if (bin) spawn(bin, ['doctor'], { shell: true, stdio: 'inherit', windowsHide: true }) } catch { } } },
-    { label: 'Open Error Logs', click: () => { shell.openPath(join(OPENCLAW_DIR, 'logs', 'gateway_error.log')) } },
+    { type: 'separator' },
+    { label: 'Open Error Logs', click: () => { shell.openPath(join(CLAWDASK_DIR, 'logs', 'gateway_error.log')) } },
+    { label: 'Help: Cloud Path Issue?', click: () => { shell.openExternal('https://github.com/clawdask/clawdask/wiki/Troubleshooting#cloud-paths') } },
     { type: 'separator' },
     { label: 'Start with Windows', type: 'checkbox', checked: getAutoStartEnabled(), click: (i: any) => setAutoStart(i.checked) },
     { type: 'separator' },
-    { label: 'About ClawDesk', click: () => { dialog.showMessageBox({ type: 'info', title: 'About ClawDesk', message: 'ClawDesk', detail: 'A desktop wrapper for OpenClaw.\n\nOpenClaw is MIT licensed.\nCopyright © 2025 Peter Steinberger\nhttps://github.com/openclaw/openclaw', buttons: ['OK'] }) } },
+    { label: 'About ClawdAsk', click: () => { dialog.showMessageBox({ type: 'info', title: 'About ClawdAsk', message: 'ClawdAsk', detail: 'Your Private AI Desktop.\n\nhttps://clawdask.app', buttons: ['OK'] }) } },
     { type: 'separator' },
     { label: 'Quit', click: () => { isQuitting = true; gateway.stop(); app.quit() } }
   ])
@@ -1396,11 +1582,12 @@ function setupIPC(): void {
     ipcMain.handle(channel, listener)
   }
 
-  safeHandle('check-openclaw', async () => ({ 
+  safeHandle('check-clawdask', async () => ({ 
     installed: !!gateway.findBin(), 
     path: gateway.findBin(), 
     isGatewayStarting: gateway.currentState === 'starting' || gateway.currentState === 'running',
-    hasValidConfig: hasValidConfig()
+    hasValidConfig: hasValidConfig(),
+    isLicenseActive: isLicenseActive()
   }))
   safeHandle('get-onboarding-state', async () => localAIManager.getOnboardingState())
   safeHandle('retry-engine-setup', async () => {
@@ -1409,30 +1596,48 @@ function setupIPC(): void {
   })
   safeHandle('save-config', async (_e, c: any) => {
     try {
-      if (!existsSync(OPENCLAW_DIR)) mkdirSync(OPENCLAW_DIR, { recursive: true })
+      if (!existsSync(CLAWDASK_DIR)) mkdirSync(CLAWDASK_DIR, { recursive: true })
       let ex: any = {}; try { ex = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) } catch { }
 
-      const providerKey = (c.provider === 'embedded' || c.provider === 'local') ? 'local' : ((c.provider === 'custom' || c.provider === 'moonshot') ? 'openai' : c.provider)
+      const providerKey = (c.provider === 'embedded' || c.provider === 'local') ? 'local' : (c.provider === 'custom' ? 'openai' : c.provider)
       const profileId = `${providerKey}:default`
       
       // Official Schema: Profile only has mode and provider
       const authProfile: any = { mode: 'api_key', provider: providerKey }
+      if (c.agentName && c.agentName.trim().length > 0) {
+        addLog(`[config] Note: Agent name '${c.agentName.trim()}' is handled by SOUL.md`)
+      }
       
+      // Determine the correct API protocol per provider
+      // Only OpenAI and Anthropic support the Responses API; everything else uses Completions
+      const RESPONSES_API_PROVIDERS = ['openai', 'anthropic', 'google', 'bedrock']
+      const apiProtocol = RESPONSES_API_PROVIDERS.includes(providerKey) ? 'openai-responses' : 'openai-completions'
+
+      // Per-provider base URLs (must match gateway native defaults)
+      const PROVIDER_BASE_URLS: Record<string, string> = {
+        openai:    'https://api.openai.com/v1',
+        anthropic: 'https://api.anthropic.com/v1',
+        google:    'https://generativelanguage.googleapis.com/v1beta',
+        moonshot:  'https://api.moonshot.ai/v1',
+        deepseek:  'https://api.deepseek.com/v1',
+        groq:      'https://api.groq.com/openai/v1',
+        mistral:   'https://api.mistral.ai/v1',
+        xai:       'https://api.x.ai/v1',
+        together:  'https://api.together.xyz/v1',
+        openrouter:'https://openrouter.ai/api/v1',
+        bedrock:   'https://bedrock-runtime.us-east-1.amazonaws.com',
+      }
+
       // Protocol details go into models.providers
       const providerConfig: any = { 
         apiKey: c.apiKey || 'local-embedded',
-        api: 'openai-responses',
-        baseUrl: c.baseUrl || 'https://api.openai.com/v1',
-        context_window: 128000,
-        models: (c.provider === 'embedded') ? AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name })) : []
+        models: (c.provider === 'embedded' || c.provider === 'local' || providerKey === 'ollama') ? AVAILABLE_MODELS.map(m => ({ id: m.id, name: m.name })) : []
       }
-
-      if (c.baseUrl) {
-        providerConfig.baseUrl = c.baseUrl
-      }
-
-      if (c.provider === 'moonshot') {
-        providerConfig.baseUrl = 'https://api.moonshot.cn/v1'
+      
+      const nativeProviders = ['google', 'anthropic', 'openai'];
+      if (!nativeProviders.includes(providerKey)) {
+        providerConfig.api = apiProtocol;
+        providerConfig.baseUrl = c.baseUrl || PROVIDER_BASE_URLS[providerKey] || 'https://api.openai.com/v1';
       }
 
       if (providerKey === 'ollama') {
@@ -1441,7 +1646,7 @@ function setupIPC(): void {
       } else if (c.provider === 'embedded' || c.provider === 'local') {
         providerConfig.apiKey = 'local-embedded'
         // Port will be dynamically updated by ensureLocalEngineRunning based on detected backend
-        providerConfig.baseUrl = c.baseUrl || 'http://127.0.0.1:8847/v1'
+        providerConfig.baseUrl = c.baseUrl || 'http://127.0.0.1:11434/v1'
       } else {
          providerConfig.apiKey = c.apiKey
       }
@@ -1476,6 +1681,7 @@ function setupIPC(): void {
           ...ex.agents,
           defaults: {
             ...ex.agents?.defaults,
+            timeoutSeconds: ex.agents?.defaults?.timeoutSeconds || 3600,
             model: c.model ? { primary: c.model } : ex.agents?.defaults?.model,
             sandbox: { mode: (c.enableSandbox && existsSync('C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe')) ? 'all' : 'off' }
           }
@@ -1519,11 +1725,11 @@ function setupIPC(): void {
         coder: 'You are a focused software architect. Prioritize code quality, explain with examples, and think systematically.'
       }
       const soulContent = templates[c.personalityTemplate] || templates.pro
-      const soulPath = join(OPENCLAW_DIR, 'SOUL.md')
-      writeFileSync(soulPath, `# ClawDesk Agent Personality\n\n${soulContent}\n`)
+      const soulPath = join(CLAWDASK_DIR, 'SOUL.md')
+      writeFileSync(soulPath, `# ClawdAsk Agent Personality\n\n${soulContent}\n`)
       addLog(`[personality] Set to: ${c.personalityTemplate || 'pro'}`)
 
-      // Clean up OpenClaw logic
+      // Clean up gateway logic
       delete (final as any).providers
       delete (final as any)._onboardingTemplate
       const cleaned = cleanConfig(final)
@@ -1536,7 +1742,7 @@ function setupIPC(): void {
   // ─── API Key Management ───
   safeHandle('save-api-key', async (_e, provider: string, key: string) => {
     try {
-      const authPath = join(OPENCLAW_DIR, 'agents', 'main', 'agent', 'auth-profiles.json')
+      const authPath = join(CLAWDASK_DIR, 'agents', 'main', 'agent', 'auth-profiles.json')
       const authDir = dirname(authPath)
       if (!existsSync(authDir)) mkdirSync(authDir, { recursive: true })
       
@@ -1598,7 +1804,69 @@ function setupIPC(): void {
     const result = await localAIManager.downloadModel(modelId, (percent, text) => {
       e.sender.send('local-ai-download-progress', { type: 'model', modelId, percent, text })
     }, force)
-    return result // Now returns { success, error?, errorCode? }
+    return result 
+  })
+
+  safeHandle('open-whop-checkout', async (_e, url: string) => {
+    try {
+      const { shell } = require('electron')
+      shell.openExternal(url)
+      return { success: true }
+    } catch (err) { return { success: false, error: String(err) } }
+  })
+
+  safeHandle('validate-whop-license', async (_e, key: string) => {
+    try {
+      if (!key || key.length < 10) {
+        return { success: false, error: 'Invalid license key format.' }
+      }
+      
+      const whopApiKey = process.env.WHOP_API_KEY || 'YOUR_WHOP_API_KEY_HERE';
+      if (whopApiKey !== 'YOUR_WHOP_API_KEY_HERE') {
+        const res = await fetch(`https://api.whop.com/api/v2/memberships/${key}`, { 
+          headers: { 
+            Authorization: `Bearer ${whopApiKey}`,
+            accept: 'application/json'
+          }
+        });
+        
+        if (!res.ok) {
+           return { success: false, error: 'Invalid or expired Whop license key.' }
+        }
+        
+        const data = await res.json();
+        if (data.status !== 'active') {
+          return { success: false, error: 'License is not active on Whop.' }
+        }
+      }
+      
+      // Save valid license
+      const licensePath = join(CLAWDASK_DIR, 'license.json')
+      const licenseData = {
+        status: 'active',
+        key: key,
+        activated_at: new Date().toISOString()
+      }
+      writeFileSync(licensePath, JSON.stringify(licenseData, null, 2))
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  safeHandle('check-license', async () => {
+    const licensePath = join(CLAWDASK_DIR, 'license.json')
+    if (existsSync(licensePath)) {
+      try {
+        const license = JSON.parse(readFileSync(licensePath, 'utf-8'))
+        return { 
+          activated: license.status === 'active' || license.activated === true,
+          email: license.email,
+          key: license.key
+        }
+      } catch { }
+    }
+    return { activated: false }
   })
 
   safeHandle('open-link', async (_e, url: string) => {
@@ -1650,7 +1918,7 @@ function setupIPC(): void {
 
   ipcMain.on('open-logs-folder', () => {
     const electron = require('electron')
-    if (electron) electron.shell.openPath(join(OPENCLAW_DIR, 'logs'))
+    if (electron) electron.shell.openPath(join(CLAWDASK_DIR, 'logs'))
   })
 
   // Multi-Channel: WhatsApp Linking
@@ -1748,7 +2016,7 @@ function setupIPC(): void {
 
       const bin = gateway.findBin()
       if (!bin) {
-        return { success: false, error: 'OpenClaw binary not found. Please reinstall ClawDesk.' }
+        return { success: false, error: 'AI gateway binary not found. Please reinstall ClawdAsk.' }
       }
 
       addLog('[start] Starting gateway...')
@@ -1862,7 +2130,7 @@ function setupIPC(): void {
 
       // Update auth-profiles.json separately if apiKey is provided
       if (config.apiKey) {
-        const authProfilesPath = join(process.env.HOME || process.env.USERPROFILE || '', '.openclaw', 'auth-profiles.json')
+        const authProfilesPath = join(process.env.HOME || process.env.USERPROFILE || '', '.clawdask', 'auth-profiles.json')
         const providerKey = (config.provider === 'custom' || config.provider === 'moonshot' || config.provider === 'embedded') ? 'openai' : config.provider
         const profileId = `${providerKey}:default`
 
@@ -1894,6 +2162,9 @@ function setupIPC(): void {
   ipcMain.handle('run-update', async () => {
     const { app } = require('electron')
     if (app.isPackaged) {
+      autoUpdater.allowPrerelease = false
+      autoUpdater.autoDownload = true
+      autoUpdater.autoInstallOnAppQuit = true
       return autoUpdater.checkForUpdatesAndNotify()
     }
     return runCLI(['update'])
@@ -1916,6 +2187,7 @@ function generateToken(): string {
 const startApp = () => {
   try {
     addTrace('startApp() entry')
+    migrateDataDirIfNeeded()
     // Ensure we are running in an Electron environment
     if (!app) {
       addTrace('FATAL: app module is undefined')
@@ -1932,6 +2204,11 @@ const startApp = () => {
       return
     }
     addTrace('Lock acquired.')
+
+    // SELF-HEAL: Sanitize config BEFORE any logic or windows
+    // Use the global gateway instance
+    // @ts-ignore
+    gateway.preStartConfigCleanup()
 
     setupDevPath()
   } catch (e) {
@@ -1997,12 +2274,13 @@ const startApp = () => {
     if (hasValidConfig()) {
       addTrace('Config is valid.')
       // Phase 10: Check if ANY valid provider is setup (not just Anthropic)
-      const authPath = join(OPENCLAW_DIR, 'agents', 'main', 'agent', 'auth-profiles.json')
+      const authPath = join(CLAWDASK_DIR, 'agents', 'main', 'agent', 'auth-profiles.json')
       
       let hasValidProvider = false
       if (existsSync(authPath)) {
         const content = readFileSync(authPath, 'utf-8')
-        hasValidProvider = content.includes('"key"') || !!content.match(/"provider"\s*:\s*"(ollama|custom|local)"/i)
+        // Include google, anthropic, openai in valid provider list
+        hasValidProvider = content.includes('"key"') || !!content.match(/"provider"\s*:\s*"(ollama|custom|local|google|anthropic|openai)"/i)
       }
       addTrace(`hasValidProvider initial check: ${hasValidProvider}`)
       
@@ -2012,7 +2290,9 @@ const startApp = () => {
           const raw = readFileSync(CONFIG_PATH, 'utf-8').replace(/^\uFEFF/, '')
           const cfg = JSON.parse(raw)
           const primaryModel = cfg?.agents?.defaults?.model?.primary || cfg?.model || ''
-          if (primaryModel.startsWith('ollama/') || primaryModel.startsWith('custom/') || primaryModel.startsWith('local/')) {
+          const prov = primaryModel.split('/')[0]
+          const validProvs = ['ollama', 'custom', 'local', 'google', 'anthropic', 'openai']
+          if (validProvs.includes(prov)) {
             hasValidProvider = true
           }
         } catch { }
@@ -2026,9 +2306,10 @@ const startApp = () => {
       }
 
       if (!isMinimized) {
-        addTrace('Attempting to create Onboarding Window (valid config/provider path)...')
+        addTrace('Valid config found - Showing branded initializer...')
         createOnboardingWindow()
       }
+      
       // Run gateway start in background
       addTrace('Initiating gateway.start()...')
       gateway.start().then((started) => {
@@ -2039,8 +2320,9 @@ const startApp = () => {
         }
 
         if (!isMinimized && !mainWindow) {
-          addTrace('Gateway started - Creating main window...')
+          addTrace('Gateway started - Transitioning to Main Window...')
           createMainWindow()
+          // createMainWindow handles closing the onboarding window automatically
         }
       })
     } else {

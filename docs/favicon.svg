@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- No background — transparent by default -->
+  
+  <!-- LEFT PINCER - upper tip -->
+  <rect x="10" y="10" width="12" height="12" rx="2" fill="#7c2d12"/>
+  <rect x="10" y="22" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="22" y="22" width="12" height="12" rx="2" fill="#f97316"/>
+  <rect x="10" y="34" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="22" y="34" width="12" height="12" rx="2" fill="#f97316"/>
+  <rect x="34" y="34" width="12" height="12" rx="2" fill="#fb923c"/>
+  
+  <!-- LEFT PINCER - lower -->
+  <rect x="10" y="46" width="12" height="12" rx="2" fill="#7c2d12"/>
+  <rect x="22" y="46" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="34" y="46" width="12" height="12" rx="2" fill="#f97316"/>
+  
+  <!-- RIGHT PINCER - upper tip -->
+  <rect x="106" y="10" width="12" height="12" rx="2" fill="#7c2d12"/>
+  <rect x="106" y="22" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="94" y="22" width="12" height="12" rx="2" fill="#f97316"/>
+  <rect x="106" y="34" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="94" y="34" width="12" height="12" rx="2" fill="#f97316"/>
+  <rect x="82" y="34" width="12" height="12" rx="2" fill="#fb923c"/>
+  
+  <!-- RIGHT PINCER - lower -->
+  <rect x="106" y="46" width="12" height="12" rx="2" fill="#7c2d12"/>
+  <rect x="94" y="46" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="82" y="46" width="12" height="12" rx="2" fill="#f97316"/>
+  
+  <!-- CONNECTOR ARMS -->
+  <rect x="34" y="58" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="46" y="58" width="12" height="12" rx="2" fill="#f97316"/>
+  <rect x="82" y="58" width="12" height="12" rx="2" fill="#c2410c"/>
+  <rect x="70" y="58" width="12" height="12" rx="2" fill="#f97316"/>
+  
+  <!-- BODY - main block -->
+  <rect x="34" y="70" width="60" height="16" rx="3" fill="#f97316"/>
+  <!-- Body highlight -->
+  <rect x="38" y="72" width="52" height="4" rx="2" fill="#fb923c" opacity="0.6"/>
+  
+  <!-- BODY - mid section -->
+  <rect x="40" y="86" width="48" height="14" rx="3" fill="#c2410c"/>
+  
+  <!-- BODY - base -->
+  <rect x="48" y="100" width="32" height="12" rx="3" fill="#7c2d12"/>
+  
+  <!-- BODY - tip -->
+  <rect x="56" y="112" width="16" height="8" rx="3" fill="#431407"/>
+  
+  <!-- Highlight pixel on pincers -->
+  <rect x="12" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/>
+  <rect x="108" y="12" width="4" height="4" rx="1" fill="#fb923c" opacity="0.5"/>
+</svg>
