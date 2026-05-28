@@ -345,19 +345,21 @@ section {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  animation: claw-float 4s ease-in-out infinite, claw-rotate 12s linear infinite;
+  animation: claw-hero-anim 6s ease-in-out infinite;
   position: relative;
+  filter: drop-shadow(0 0 20px rgba(249,115,22,0.4));
+  transition: transform 0.3s ease-out, filter 0.3s ease;
 }
 
-@keyframes claw-float {
-  0%, 100% { transform: translateY(0) rotateX(-15deg); }
-  50% { transform: translateY(-16px) rotateX(-15deg); }
+.claw-3d-container:hover .claw-3d {
+  transform: scale(1.1) rotateY(15deg) rotateX(-5deg);
+  filter: drop-shadow(0 0 40px rgba(249,115,22,0.8));
+  animation: none;
 }
 
-@keyframes claw-rotate {
-  0% { transform: translateY(0) rotateX(-15deg) rotateY(0deg); }
-  50% { transform: translateY(-16px) rotateX(-15deg) rotateY(180deg); }
-  100% { transform: translateY(0) rotateX(-15deg) rotateY(360deg); }
+@keyframes claw-hero-anim {
+  0%, 100% { transform: translateY(0) rotateX(-5deg) rotateY(-10deg); }
+  50% { transform: translateY(-15px) rotateX(5deg) rotateY(10deg); filter: drop-shadow(0 0 30px rgba(249,115,22,0.6)); }
 }
 
 .claw-shadow {
