@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawdAsk — TikTok Outro / CTA</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #020202;
+            color: #ededed;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            width: 1080px;
+            height: 1920px;
+            position: relative;
+        }
+
+        /* Background pulse */
+        .bg-pulse {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(249,115,22,0.12) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: bgPulse 3s ease-in-out infinite;
+        }
+        @keyframes bgPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+            50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+        }
+
+        .center {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
+
+        /* Claw "waking up" animation */
+        .claw-wake {
+            width: 240px; height: 240px;
+            margin: 0 auto 50px;
+            opacity: 0;
+            animation: wakeUp 1.5s 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+        @keyframes wakeUp {
+            0% { opacity: 0; transform: scale(0.5); filter: brightness(0) blur(10px); }
+            40% { opacity: 1; filter: brightness(3) blur(0); }
+            100% { opacity: 1; transform: scale(1); filter: brightness(1) blur(0); }
+        }
+
+        .claw-wake svg {
+            width: 100%; height: 100%;
+            filter: drop-shadow(0 0 30px rgba(249,115,22,0.5));
+            animation: breathe 3s 2s ease-in-out infinite;
+        }
+        @keyframes breathe {
+            0%, 100% { filter: drop-shadow(0 0 30px rgba(249,115,22,0.3)); }
+            50% { filter: drop-shadow(0 0 50px rgba(249,115,22,0.6)); }
+        }
+
+        /* Main text */
+        .main-text {
+            font-size: 56px;
+            font-weight: 700;
+            letter-spacing: -1px;
+            line-height: 1.2;
+            margin-bottom: 20px;
+            opacity: 0;
+            animation: textUp 0.8s 1s forwards;
+        }
+        .accent { color: #f97316; }
+
+        .sub-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 22px;
+            color: rgba(255,255,255,0.5);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 60px;
+            opacity: 0;
+            animation: textUp 0.6s 1.4s forwards;
+        }
+
+        @keyframes textUp {
+            0% { opacity: 0; transform: translateY(30px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* CTA Button */
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 24px 48px;
+            background: transparent;
+            border: 2px solid #f97316;
+            color: #f97316;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            border-radius: 4px;
+            opacity: 0;
+            animation: ctaIn 0.6s 1.8s forwards, ctaPulse 2s 2.4s infinite;
+        }
+        @keyframes ctaIn {
+            0% { opacity: 0; transform: scale(0.9); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes ctaPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.3); }
+            50% { box-shadow: 0 0 0 15px rgba(249,115,22,0); }
+        }
+
+        /* Arrow pointing down */
+        .arrow-down {
+            position: absolute;
+            bottom: 150px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 48px;
+            color: #f97316;
+            opacity: 0;
+            animation: textUp 0.4s 2.2s forwards, arrowBounce 1.5s 2.2s infinite;
+        }
+        @keyframes arrowBounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(15px); }
+        }
+
+        /* Bio handle */
+        .bio-handle {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            color: rgba(249,115,22,0.6);
+            letter-spacing: 2px;
+            opacity: 0;
+            animation: textUp 0.4s 2.6s forwards;
+        }
+
+        .vignette {
+            position: absolute; inset: 0;
+            background: radial-gradient(circle, transparent 30%, rgba(0,0,0,0.7) 100%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pulse"></div>
+
+    <div class="center">
+        <div class="claw-wake">
+            <svg viewBox="0 0 64 64" fill="none">
+                <rect x="8" y="8" width="8" height="8" fill="#c2410c" rx="1"/>
+                <rect x="8" y="16" width="8" height="8" fill="#f97316" rx="1"/>
+                <rect x="16" y="16" width="8" height="8" fill="#fb923c" rx="1"/>
+                <rect x="8" y="24" width="8" height="8" fill="#c2410c" rx="1"/>
+                <rect x="16" y="24" width="8" height="8" fill="#f97316" rx="1"/>
+                <rect x="48" y="8" width="8" height="8" fill="#c2410c" rx="1"/>
+                <rect x="48" y="16" width="8" height="8" fill="#f97316" rx="1"/>
+                <rect x="40" y="16" width="8" height="8" fill="#fb923c" rx="1"/>
+                <rect x="48" y="24" width="8" height="8" fill="#c2410c" rx="1"/>
+                <rect x="40" y="24" width="8" height="8" fill="#f97316" rx="1"/>
+                <rect x="16" y="32" width="32" height="8" fill="#f97316" rx="1"/>
+                <rect x="20" y="40" width="24" height="8" fill="#c2410c" rx="1"/>
+                <rect x="24" y="48" width="16" height="8" fill="#7c2d12" rx="1"/>
+            </svg>
+        </div>
+
+        <div class="main-text">
+            Your <span class="accent">Jarvis</span><br>
+            is waiting.
+        </div>
+        <div class="sub-text">Download — Free — Windows</div>
+        <div class="cta-btn">⚡ Link in Bio</div>
+    </div>
+
+    <div class="arrow-down">↓</div>
+    <div class="bio-handle">@clawdask</div>
+    <div class="vignette"></div>
+</body>
+</html>
