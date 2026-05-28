@@ -79,10 +79,10 @@
                 <div class="feature-icon">🖱️</div>
                 <h3>Computer Control</h3>
                 <p>Full mouse and keyboard autonomy. It clicks buttons, fills forms, drags files, and navigates any application like a real user sitting at your desk.</p>
-            </div>
-            <div class="feature-card reveal">
-                <div class="feature-icon">🌐</div>
-                <h3>Web Browsing</h3>
+                </div>
+                <div class="feature-card reveal" style="transition-delay: 0.3s;">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Web Browsing</h3>
                 <p>Researches topics, scrapes data, fills out online forms, manages social media, and navigates complex multi-step web workflows.</p>
             </div>
             <div class="feature-card reveal">
@@ -109,15 +109,13 @@
     </section>
 
     <!-- HOW IT WORKS -->
-    <section class="how-section">
-        <div class="section-center reveal">
-            <span class="section-label">How it works</span>
-            <h2 class="section-title">Deploy your digital employee<br>in under 2 minutes.</h2>
-        </div>
+    <section class="section">
+        <div class="section-inner">
+            <h2 class="reveal">Automate the boring. <span class="accent">Focus on the impossible.</span></h2>
+            <p class="subtitle reveal" style="transition-delay: 0.1s;">ClawdAsk is not a chatbot. It's a local worker that takes over your mouse and keyboard to complete real workflows.</p>
 
-        <div class="steps">
-            <div class="step reveal">
-                <div class="step-num">01</div>
+            <div class="features-grid">
+                <div class="feature-card reveal" style="transition-delay: 0.2s;">01</div>
                 <h3>Download & Install</h3>
                 <p>One-click installer. No terminal commands, no dependencies, no configuration files to edit.</p>
             </div>
@@ -136,9 +134,9 @@
     </section>
 
     <!-- CTA -->
-    <section class="cta-section">
-        <div class="cta-box reveal">
-            <h2>Ready to hire your<br>digital employee?</h2>
+    <section class="section">
+        <div class="section-inner text-center reveal">
+            <h2>Ready to hire your first <span class="accent">digital employee</span>?</h2>
             <p>Download ClawdAsk and start automating real work in minutes. Your computer. Your data. Your rules.</p>
             <a href="download.html" class="btn btn-primary">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zM2 14h12v-1H2v1z"/></svg>
@@ -160,84 +158,27 @@
     </footer>
 
     <script>
-    // ─── 3D PIXEL CRAB CLAW BUILDER ───
-    (function buildClaw() {
-        const container = document.getElementById('claw3d');
-        if (!container) return;
-
-        // Claw pixel map: [row, col, colorVariant]
-        // 0=dark orange, 1=bright orange, 2=highlight, 3=deep shadow
-        const colors = ['#c2410c', '#f97316', '#fb923c', '#7c2d12'];
-        
-        // LEFT PINCER
-        const leftPincer = [
-            [2,3,1],[2,4,2],[3,2,0],[3,3,1],[3,4,1],[3,5,2],
-            [4,1,0],[4,2,1],[4,3,1],[4,4,2],[5,1,3],[5,2,0],[5,3,1],
-            [6,2,0],[6,3,1],[7,3,0],[7,4,1],[8,4,0],[8,5,1],[9,5,0],[9,6,1]
-        ];
-        
-        // RIGHT PINCER (mirror)
-        const rightPincer = [
-            [2,11,2],[2,12,1],[3,10,2],[3,11,1],[3,12,1],[3,13,0],
-            [4,11,2],[4,12,1],[4,13,1],[4,14,0],[5,12,1],[5,13,0],[5,14,3],
-            [6,12,1],[6,13,0],[7,11,1],[7,12,0],[8,10,1],[8,11,0],[9,9,1],[9,10,0]
-        ];
-        
-        // BODY/JOINT
-        const body = [
-            [10,5,0],[10,6,1],[10,7,1],[10,8,1],[10,9,1],[10,10,0],
-            [11,4,3],[11,5,0],[11,6,1],[11,7,2],[11,8,2],[11,9,1],[11,10,0],[11,11,3],
-            [12,5,0],[12,6,1],[12,7,1],[12,8,1],[12,9,1],[12,10,0],
-            [13,6,3],[13,7,0],[13,8,0],[13,9,3],
-            [14,7,3],[14,8,3]
-        ];
-        
-        const allPixels = [...leftPincer, ...rightPincer, ...body];
-        const size = 16;
-        const offsetX = -8 * size;
-        const offsetY = -8 * size;
-        
-        allPixels.forEach(([row, col, ci]) => {
-            const px = document.createElement('div');
-            px.className = 'px';
-            px.style.cssText = `
-                left: ${col * size + offsetX + 130}px;
-                top: ${row * size + offsetY + 130}px;
-                --px-color: ${colors[ci]};
-            `;
-            container.appendChild(px);
-        });
+    // Particle background
+    (function() {
+        const c = document.getElementById('particles');
+        if (!c) return;
+        for (let i = 0; i < 30; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.cssText = `left:${Math.random()*100}%;animation-duration:${10+Math.random()*20}s;animation-delay:${Math.random()*5}s;width:${1+Math.random()*2}px;height:${1+Math.random()*2}px;`;
+            c.appendChild(p);
+        }
     })();
 
-    // ─── SCROLL REVEAL ───
+    // Scroll reveal animation
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('visible');
             }
         });
-    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
-
+    }, { threshold: 0.1 });
     document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
-
-    // ─── PARTICLES ───
-    (function initParticles() {
-        const container = document.getElementById('particles');
-        if (!container) return;
-        for (let i = 0; i < 30; i++) {
-            const p = document.createElement('div');
-            p.className = 'particle';
-            p.style.cssText = `
-                left: ${Math.random() * 100}%;
-                animation-duration: ${12 + Math.random() * 18}s;
-                animation-delay: ${Math.random() * 10}s;
-                width: ${1 + Math.random() * 2}px;
-                height: ${1 + Math.random() * 2}px;
-            `;
-            container.appendChild(p);
-        }
-    })();
     </script>
-
 </body>
 </html>

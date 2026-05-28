@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawdAsk Social Media Assets Generator</title>
+    <style>
+        body { background: #020202; color: #fff; font-family: 'Inter', sans-serif; padding: 40px; text-align: center; }
+        h1 { color: #f97316; }
+        p { color: #888; margin-bottom: 40px; }
+        .canvas-container { display: flex; flex-wrap: wrap; gap: 40px; justify-content: center; }
+        .asset-card { background: #0a0a0a; border: 1px solid #1a1a1a; padding: 20px; border-radius: 12px; }
+        canvas { border: 1px solid #333; max-width: 100%; height: auto; max-height: 400px; display: block; margin-bottom: 20px; }
+        button { background: #f97316; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-family: inherit; transition: 0.2s; }
+        button:hover { background: #fb923c; }
+    </style>
+</head>
+<body>
+    <h1>Social Media Assets</h1>
+    <p>These assets use your exact official pixel-art logo. Click the buttons below to download them in high resolution.</p>
+    
+    <div class="canvas-container">
+        <!-- Profile / Square (1080x1080) -->
+        <div class="asset-card">
+            <h3>Profile Picture (1080x1080)</h3>
+            <canvas id="canvas-square" width="1080" height="1080"></canvas>
+            <button onclick="downloadAsset('canvas-square', 'ClawdAsk-Profile.png')">Download Profile (Instagram/X/TikTok)</button>
+        </div>
+
+        <!-- Landscape / Cover (1920x1080) -->
+        <div class="asset-card">
+            <h3>Cover Banner (1920x1080)</h3>
+            <canvas id="canvas-landscape" width="1920" height="1080"></canvas>
+            <button onclick="downloadAsset('canvas-landscape', 'ClawdAsk-Cover.png')">Download Cover (YouTube/X)</button>
+        </div>
+
+        <!-- Portrait / Story (1080x1920) -->
+        <div class="asset-card">
+            <h3>Story / Shorts Background (1080x1920)</h3>
+            <canvas id="canvas-portrait" width="1080" height="1920"></canvas>
+            <button onclick="downloadAsset('canvas-portrait', 'ClawdAsk-Story.png')">Download Story (TikTok/Shorts)</button>
+        </div>
+    </div>
+
+    <script>
+        const svgUrl = 'favicon.svg';
+
+        function drawToCanvas(canvasId, width, height, logoScale) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Fill deep black background
+            ctx.fillStyle = '#020202';
+            ctx.fillRect(0, 0, width, height);
+
+            // Add subtle glow in the center
+            const gradient = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width/1.5);
+            gradient.addColorStop(0, 'rgba(249, 115, 22, 0.08)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Load SVG and draw
+            const img = new Image();
+            img.onload = () => {
+                // Calculate size keeping aspect ratio
+                const targetSize = Math.min(width, height) * logoScale;
+                const x = (width - targetSize) / 2;
+                const y = (height - targetSize) / 2;
+
+                // Draw drop shadow manually
+                ctx.shadowColor = 'rgba(249, 115, 22, 0.3)';
+                ctx.shadowBlur = 40;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 10;
+                
+                ctx.drawImage(img, x, y, targetSize, targetSize);
+            };
+            img.src = svgUrl;
+        }
+
+        function downloadAsset(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        window.onload = () => {
+            // Square: logo takes 60% of width
+            drawToCanvas('canvas-square', 1080, 1080, 0.6);
+            // Landscape: logo takes 40% of height
+            drawToCanvas('canvas-landscape', 1920, 1080, 0.4);
+            // Portrait: logo takes 50% of width
+            drawToCanvas('canvas-portrait', 1080, 1920, 0.5);
+        };
+    </script>
+</body>
+</html>

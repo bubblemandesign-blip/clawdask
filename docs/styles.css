@@ -345,21 +345,19 @@ section {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  animation: claw-hero-anim 6s ease-in-out infinite;
+  animation: claw-float 4s ease-in-out infinite, claw-rotate 12s linear infinite;
   position: relative;
-  filter: drop-shadow(0 0 20px rgba(249,115,22,0.4));
-  transition: transform 0.3s ease-out, filter 0.3s ease;
 }
 
-.claw-3d-container:hover .claw-3d {
-  transform: scale(1.1) rotateY(15deg) rotateX(-5deg);
-  filter: drop-shadow(0 0 40px rgba(249,115,22,0.8));
-  animation: none;
+@keyframes claw-float {
+  0%, 100% { transform: translateY(0) rotateX(-15deg); }
+  50% { transform: translateY(-16px) rotateX(-15deg); }
 }
 
-@keyframes claw-hero-anim {
-  0%, 100% { transform: translateY(0) rotateX(-5deg) rotateY(-10deg); }
-  50% { transform: translateY(-15px) rotateX(5deg) rotateY(10deg); filter: drop-shadow(0 0 30px rgba(249,115,22,0.6)); }
+@keyframes claw-rotate {
+  0% { transform: translateY(0) rotateX(-15deg) rotateY(0deg); }
+  50% { transform: translateY(-16px) rotateX(-15deg) rotateY(180deg); }
+  100% { transform: translateY(0) rotateX(-15deg) rotateY(360deg); }
 }
 
 .claw-shadow {
@@ -759,7 +757,38 @@ section {
 }
 
 .footer-links a { color: #555; }
-.footer-links a:hover { color: var(--accent); }
+.footer-links a:hover { color: #f97316; }
+
+/* ── Scroll Reveal Animations ── */
+.reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease-out, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ── Sci-Fi Micro-interactions ── */
+.btn-primary {
+    position: relative;
+    overflow: hidden;
+}
+.btn-primary::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+    transform: rotate(30deg) translateX(-100%);
+    transition: transform 0.6s ease;
+}
+.btn-primary:hover::after {
+    transform: rotate(30deg) translateX(100%);
+}
 
 /* ═══════════════════════════════════════════════════════════
    SCROLL ANIMATIONS
